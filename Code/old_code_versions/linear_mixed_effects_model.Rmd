@@ -1,0 +1,289 @@
+---
+title: "linear_mixed_effects_model"
+author: "Andrew Willems and Tian Hong"
+date: "3/22/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Linear Mixed Effects Model Analysis
+
+In this analysis I seek to determine two things. One, are the variables Condition, Map ID, or Cohort independent or not. Two, if any of these variables are not independent what does a linear mixed effects model look like when we account for those non-independent variables. 
+
+
+## Step One: Load Packages
+If you do not have any of these packages they can be installed with the following command install.packages() in an R console
+```{r}
+#Loading needed packages----
+library(emmeans)
+library(gt)
+library(ICC)
+library(nlme)
+library(modelsummary)
+library(tidyverse)
+```
+
+## Step Two: Load in the data and filter it into separate data frames containg only left or right hemisphere data
+```{r}
+#Loading the data----
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Data/")
+pnn_data <- read.csv("processed_data_PNN_3cohorts.csv", sep = "\t")
+pnn_data_left <- filter(pnn_data, Hemisphere=="Left")
+pnn_data_right <- filter(pnn_data, Hemisphere=="Right")
+```
+
+## Step Three: Begin Left Hemisphere analysis. We start be using the Intraclass correlation coefficient (ICC) to determine if the variables Condition, Map ID, or Cohort are truly independent or not. I use the ICCbare command with x representing the grouping variable of interest and y representing the Mean 2 variable
+```{r}
+#Left hemisphere analysis----
+#Intraclass correlation coefficient (ICC) 
+#For Condition
+icc_cond=ICCbare(x=factor(Condition), y= Mean.2,data = pnn_data_left)
+#For Map ID
+icc_map=ICCbare(x=factor(Map.ID), y= Mean.2,data = pnn_data_left)
+#For Cohort
+icc_cohort=ICCbare(x=factor(Cohort), y= Mean.2,data = pnn_data_left)
+
+#Making a data frame
+icc_df <- data.frame(Condition=icc_cond, Cohort=icc_cohort, Map=icc_map)
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for left hemisphere PNN data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Condition", "Cohort", "Map")
+ )
+
+```
+## Step 4: The Cohort variable has an ICC value (0.668) that indicates it is not independent and therefore we should build a linear-mixed-effects model to account for this. The other two variables have small ICC values and do not be considered as random effects in our model
+```{r}
+#The linear-mixed-effects model
+#The fixed effect is the Condition variable. The random variable is Cohort
+lme_mod=lme(Mean.2~Condition, data= pnn_data_left, random = ~ 1|Cohort)
+
+modelsummary(
+  lme_mod,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  coef_rename = c("ConditionNW" = "NW", "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+## Step 5: Perform an overall model Wald test. Here we see that the when comparing our intercept-only model to our predictor-included model we have strong statistical support for significance (p-value < 0.0001)
+```{r}
+#ANOVA Wald test for overall model p-value
+wald_test <- anova(lme_mod)
+wald_test$terms <- rownames(wald_test)
+gt(wald_test)
+```
+## Step 6: Perform an overall model likelihood ratio (LRT) test. Here again we see that we have strong support for concluding that our predictor-included model better fits the data with a p-value <0.0001. Our Wald and LRT stats are similar and this further supports our claim that our model with Condition as a predictor of Mean 2 is well-supported. Finally, LRT is considered to be prefereable to Wald which is another point in our favor. 
+```{r}
+#ANOVA likelihood ratio (LRT) test for overall model p-value
+#Here we are comparing the intercept only model with the model that includes
+#the predictor of Condition
+base_lme_mod=lme(Mean.2~1, data= pnn_data_left,
+                 random = ~ 1|Cohort, method="ML")
+pred_lme_mod=lme(Mean.2~Condition, data= pnn_data_left,
+                 random = ~ 1|Cohort, method="ML")
+
+lrt_test <- anova(base_lme_mod, pred_lme_mod)
+
+lrt_test_df <- data.frame(lrt_test$Model, lrt_test$df, lrt_test$AIC,
+                          lrt_test$BIC, lrt_test$logLik, lrt_test$Test,
+                          lrt_test$L.Ratio, lrt_test$`p-value`[2])
+
+colnames(lrt_test_df) <- c("Model", "df", "AIC", "BIC", "logLik", "Test",
+                           "L.Ratio", "P-value")
+
+gt_lrt <- gt(lrt_test_df)
+gt_lrt
+gt_lrt %>% tab_header(
+  title = "LRT for Left Hemisphere",
+  subtitle = "LRT for left hemisphere PNN data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Model","df","AIC","BIC","logLik", "Test","L.Ratio", "P-value")
+ )
+```
+
+
+## Step 7: Doing a pairwise comparison of our various conditions. Note that these p-values are adjusted with the tukey method. From the results we see that the NH-NW comparison is not signficant while all other comparisons are less than 0.05 and many are less than 0.0001. 
+```{r}
+#Doing pairwise adjusted-p-value comparison
+left_hemi_pairwise <- contrast(emmeans(lme_mod, specs="Condition"), "pairwise")
+left_hemi_pairwise <- as.data.frame(left_hemi_pairwise)
+colnames(left_hemi_pairwise) <- c("Contrast", "Estimate", "SE", "df",
+                                  "T-ratio", "P-value")
+gt_left_hemi_pw <- gt(left_hemi_pairwise)
+gt_left_hemi_pw %>% tab_header(
+  title = "Left Hemisphere Pairwise Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Contrast", "Estimate", "SE", "df", "T-ratio", "P-value")
+)
+```
+## Step 8: Comparingn NW to all other treatment conditions (i.e. treatment vs. control). Note that these p-values are adjusted with the dunnettx method (similar to Tukey). We see that in the SH-NW comparison we have a p-value <0.0001. We also have a statistically significanct difference between SW-NW. We might want to investigate why our two wildtypes are different from one another because this also holds true in the pairwise analysis. From this step and step 8 we can confidently conclude that there are differences between the NW and the other groups being examined in the left hemisphere for Mean 2 expression. 
+```{r}
+#Doing treatment vs. control p-value comparison (Specifying NW as control)
+treat_v_control <- contrast(emmeans(lme_mod, specs="Condition"), "trt.vs.ctrl", ref=2)
+treat_v_control <- as.data.frame(treat_v_control)
+colnames(treat_v_control) <- c("Contrast", "Estimate", "SE", "df",
+                                  "T-ratio", "P-value")
+
+
+gt_left_hemi_tc <- gt(treat_v_control)
+gt_left_hemi_tc %>% tab_header(
+  title = "Left Hemisphere Treatment vs. Control Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Contrast", "Estimate", "SE", "df", "T-ratio", "P-value")
+)
+```
+## Step 9: Constructing 95% Confidence intervals. We construct 95% confidence intervals to further support our analysis as this is now becoming a standard value to report in literature to help with rigor and reproducibility.
+```{r}
+#Constructing 95% Confidence intervals
+left_ci <- contrast(emmeans(lme_mod, specs="Condition"),
+         "pairwise") %>% summary(infer = TRUE)
+
+left_ci <- as.data.frame(left_ci)
+colnames(left_ci) <- c("Contrast", "Estimate", "SE", "df", "Lower CL",
+                       "Upper CL","T-ratio", "P-value")
+
+left_ci <- gt(left_ci)
+left_ci %>% tab_header(
+  title = "Left Hemisphere 95% Confidence Interval"
+) %>% cols_align(
+  align = "center",
+  columns = c("Contrast", "Estimate", "SE", "df", "Lower CL",
+                       "Upper CL","T-ratio", "P-value")
+)
+
+```
+## Step 10: Doing all of the same anlyses we did above but on right hemisphere data
+```{r}
+#Right hemisphere analysis----
+#Intraclass correlation coefficient (ICC)
+icc_cond=ICCbare(x=factor(Condition), y= Mean.2,data = pnn_data_right)
+icc_map=ICCbare(x=factor(Map.ID), y= Mean.2,data = pnn_data_right)
+icc_cohort=ICCbare(x=factor(Cohort), y= Mean.2,data = pnn_data_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Condition=icc_cond, Cohort=icc_cohort, Map=icc_map)
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for right hemisphere PNN data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Condition", "Cohort", "Map")
+ )
+```
+## Right hemisphere ICC conclusion: We see that we have 0.58 ICC for the cohort variable. Given this, we have moderate correlation among the measurements from this variable and we should consider it as a random effect in a mixed effects model. Finally, we examine the Map variable it has an ICC of only 0.049 which indicates there is very little correlation among measurements for this variable and does not need to be considered as a random effect in our model.  
+```{r}
+#The linear-mixed-effects model
+lme_mod=lme(Mean.2~Condition, data= pnn_data_right, random = ~ 1|Cohort)
+
+modelsummary(
+  lme_mod,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  coef_rename = c("ConditionNW" = "NW", "ConditionSH" = "SH", "ConditionSW" = "SW"))
+
+```
+## The Wald test shows us that our Condition-included model better fits our data than our intercept-only model with a p-value <0.0001
+```{r}
+#ANOVA Wald test for overall model p-value
+wald_test <- anova(lme_mod)
+wald_test$terms <- rownames(wald_test)
+gt(wald_test)
+```
+## LRT shows the same thing with p-value <0.0001. Given that this is prefered to Wald this further supports our claim that using Condition better models the data we observe and better captures the relationship to Mean 2 than the intercept-only model 
+```{r}
+#ANOVA likelihood ratio (LRT) test for overall model p-value
+base_lme_mod=lme(Mean.2~1, data= pnn_data_right,
+                 random = ~ 1|Cohort, method="ML")
+pred_lme_mod=lme(Mean.2~Condition, data= pnn_data_right,
+                 random = ~ 1|Cohort, method="ML")
+
+lrt_test <- anova(base_lme_mod, pred_lme_mod)
+
+lrt_test_df <- data.frame(lrt_test$Model, lrt_test$df, lrt_test$AIC,
+                          lrt_test$BIC, lrt_test$logLik, lrt_test$Test,
+                          lrt_test$L.Ratio, lrt_test$`p-value`[2])
+
+colnames(lrt_test_df) <- c("Model", "df", "AIC", "BIC", "logLik", "Test",
+                           "L.Ratio", "P-value")
+
+gt_lrt <- gt(lrt_test_df)
+gt_lrt
+gt_lrt %>% tab_header(
+  title = "LRT for Right Hemisphere",
+  subtitle = "LRT for right hemisphere PNN data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Model","df","AIC","BIC","logLik", "Test","L.Ratio", "P-value")
+ )
+```
+## These p-values are adjusted with the Tukey method. The NH-NW comparison is not signficant, and the NW-SW comparison is not signficanct. All other comparisons are less than 0.05 and some are less than 0.0001. This indicates that certain conditions are highly different from others and their values of Mean 2 
+```{r}
+#Doing pairwise adjusted p-value comparison
+right_hemi_pairwise <- contrast(emmeans(lme_mod, specs="Condition"), "pairwise")
+right_hemi_pairwise <- as.data.frame(right_hemi_pairwise)
+colnames(right_hemi_pairwise) <- c("Contrast", "Estimate", "SE", "df",
+                                  "T-ratio", "P-value")
+gt_right_hemi_pw <- gt(right_hemi_pairwise)
+gt_right_hemi_pw %>% tab_header(
+  title = "Right Hemisphere Pairwise Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Contrast", "Estimate", "SE", "df", "T-ratio", "P-value")
+)
+```
+## These p-values are adjusted with the dunnettx method (similar to Tukey). We see that only SH is statistically signficant when comparing to the control of NW.
+
+```{r}
+#Doing treatment vs. control p-value comparison (Specifying NW as control)
+treat_v_control <- contrast(emmeans(lme_mod, specs="Condition"), "trt.vs.ctrl", ref=2)
+treat_v_control <- as.data.frame(treat_v_control)
+colnames(treat_v_control) <- c("Contrast", "Estimate", "SE", "df",
+                                  "T-ratio", "P-value")
+
+
+gt_right_hemi_tc <- gt(treat_v_control)
+gt_right_hemi_tc %>% tab_header(
+  title = "Right Hemisphere Treatment vs. Control Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Contrast", "Estimate", "SE", "df", "T-ratio", "P-value")
+)
+```
+## Constructing 95% confidence intervals to further improve rigor and reproducibility
+```{r}
+#Constructing 95% Confidence intervals
+right_ci <- contrast(emmeans(lme_mod, specs="Condition"),
+         "pairwise") %>% summary(infer = TRUE)
+
+right_ci <- as.data.frame(right_ci)
+colnames(right_ci) <- c("Contrast", "Estimate", "SE", "df", "Lower CL",
+                       "Upper CL","T-ratio", "P-value")
+
+right_ci <- gt(right_ci)
+right_ci %>% tab_header(
+  title = "Right Hemisphere 95% Confidence Interval"
+) %>% cols_align(
+  align = "center",
+  columns = c("Contrast", "Estimate", "SE", "df", "Lower CL",
+                       "Upper CL","T-ratio", "P-value")
+)
+```
+## Conclusion: The Cohort variable is not indepedent and therefore should be considered as a random effect in a mixed effects model. We see that when using this type of model we still see statistically signficant differences for many of the different conditions as outlined in the written sections above. It appears that we have strong support so far that SH mice are indeed different from NW whether we look at either left or right hemisphere regardless of if we are doing 'treatment vs. control' or 'pairwise' comparisons for mean expression of PNN. We should test to see if this relationship holds up in other cohorts for future directions.  

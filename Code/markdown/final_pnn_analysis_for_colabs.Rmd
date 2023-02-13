@@ -1,0 +1,902 @@
+---
+title: "Final PNN Analysis for Dr. Krishnan and Logan"
+author: "Andrew Willems and Dr. Tian Hong"
+date: "6/10/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective: Compile all PNN analysis done for the Krishnan lab into a single, easy to integrate document for their publication
+
+## Step 1: Load needed packages. `ggplot2` is for plotting. `ggsignif` is used to add statistical results to ggplot plots. `gt` is used for making the nice tables. `ICC` is used to calculate the intraclass correlation coefficient to tell us if we can treat our predictors (variables) as independent or not. `magrittr` is a package that allows us to use pipes (%>%) in our code. `modelsummary` allows us to format our model output in a professional fashion.  `nlme` is the package that performs the linear mixed effects (lme) model fits. `rstatix` is used to do the pairwise t-tests and p-value correction. `tidyverse` is used for data manipulation. `webshot` is used to save our gt tables as `.png` files.
+```{r step1, message=FALSE, echo=FALSE}
+# Loading needed packages
+library(ggplot2)
+library(ggsignif)
+library(gt)
+library(ICC)
+library(magrittr)
+library(modelsummary)
+library(nlme)
+library(rstatix)
+library(tidyverse)
+library(webshot)
+```
+
+## Step 2a: Load first processed PNN cohort file we have
+```{r step2a, echo=FALSE}
+# Loading the data
+setwd("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/")
+first_pnn_data <- read.csv("processed_data_PNN_3cohorts.csv", sep = "\t")
+first_pnn_data_left <- filter(first_pnn_data, Hemisphere == "Left")
+first_pnn_data_right <- filter(first_pnn_data, Hemisphere == "Right")
+head(first_pnn_data)
+head(first_pnn_data_left)
+head(first_pnn_data_right)
+```
+
+## Step 2b: Load the second processed PNN cohort
+```{r step2b, echo=FALSE}
+setwd("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/")
+second_pnn_data <- read.csv("processed_data_PNN_031022_corrected.csv", sep = "\t")
+second_pnn_data_left <- filter(second_pnn_data, Hemisphere == "Left")
+second_pnn_data_right <- filter(second_pnn_data, Hemisphere == "Right")
+head(second_pnn_data)
+head(second_pnn_data_left)
+head(second_pnn_data_right)
+```
+
+## Step 2b2: Load the third processed PNN cohort
+```{r step2b2, echo=FALSE}
+setwd("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/")
+third_pnn_data <- read.csv("processed_data_PNN_061222.csv", sep = "\t")
+third_pnn_data_left <- filter(third_pnn_data, Hemisphere == "Left")
+third_pnn_data_right <- filter(third_pnn_data, Hemisphere == "Right")
+head(third_pnn_data)
+head(third_pnn_data_left)
+head(third_pnn_data_right)
+```
+
+
+## Step 2c: Combine all of the processed cohort files into a single dataset for later ICC analysis
+```{r step2c, echo=FALSE}
+all_pnn_data <- bind_rows(first_pnn_data, second_pnn_data, third_pnn_data)
+dim(all_pnn_data)
+all_pnn_data_naive <- filter(all_pnn_data, Condition %in% c("NW", "NH"))
+```
+
+
+## Step 2d: Filtering the combined naive only processed cohort files to just S1BF subregion
+```{r step2d, echo=FALSE}
+all_pnn_data_naive_s1bf <- filter(all_pnn_data_naive, Subregion == "S1BF")
+```
+
+
+## Step 2e: Filtering the combined processed cohort files to just S1BF subregion
+```{r step2f, echo=FALSE}
+all_pnn_data_s1bf <- filter(all_pnn_data, Subregion == "S1BF")
+```
+
+## Step 3a: Subsetting to just the S1BF subregion for the second set of cohorts. We don't have a `Subregion` variable in the data for the first set of cohorts. I believe we talked about this before and the data was just for the S1BF region. 
+```{r step3a, echo=FALSE}
+second_pnn_data_left <- filter(second_pnn_data_left, Subregion == "S1BF")
+second_pnn_data_right <- filter(second_pnn_data_right, Subregion == "S1BF")
+
+head(second_pnn_data_left)
+head(second_pnn_data_right)
+```
+
+## Step 3a2: Subsetting to just the S1BF subregion for the third set of cohorts.
+```{r step3a2, echo=FALSE}
+third_pnn_data_left <- filter(third_pnn_data_left, Subregion == "S1BF")
+third_pnn_data_right <- filter(third_pnn_data_right, Subregion == "S1BF")
+
+head(third_pnn_data_left)
+head(third_pnn_data_right)
+```
+
+
+## Step 3b: Subsetting the S1BF subregion files to just NH and NW
+```{r step3b, echo=FALSE, message=FALSE}
+first_pnn_data_left <- filter(first_pnn_data_left, Condition == "NH" | Condition == "NW")
+first_pnn_data_right <- filter(first_pnn_data_right, Condition == "NH" | Condition == "NW")
+
+second_pnn_data_left <- filter(second_pnn_data_left, Condition == "NH" | Condition == "NW")
+second_pnn_data_right <- filter(second_pnn_data_right, Condition == "NH" | Condition == "NW")
+
+third_pnn_data_left <- filter(third_pnn_data_left, Condition == "NH" | Condition == "NW")
+third_pnn_data_right <- filter(third_pnn_data_right, Condition == "NH" | Condition == "NW")
+```
+
+## Step 4a: Performing ICC analysis for each of our datasets. Here we are doing the ICC analysis comparing `Condition`, `Map`, and `Cohort` to the second mean (`Mean.2`) from the processed data that is subsetted to just `NH` and `NW` samples from the `S1BF` subregion
+```{r step4a, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = first_pnn_data_left)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = first_pnn_data_left)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = first_pnn_data_left)
+
+
+# Making a data frame
+icc_df <- data.frame(Condition = icc_cond, Cohort = icc_cohort, Map = icc_map)
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 1st Cohort Left Hemisphere"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4b: ICC for first cohort set right hemisphere
+```{r step4b, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = first_pnn_data_right)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = first_pnn_data_right)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = first_pnn_data_right)
+
+# Making a data frame
+icc_df <- data.frame(Condition = icc_cond, Cohort = icc_cohort, Map = icc_map)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 1st Cohort Right Hemisphere"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4c: ICC analysis for second cohort set left hemisphere
+```{r step4c, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = second_pnn_data_left)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = second_pnn_data_left)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = second_pnn_data_left)
+
+# Making a data frame
+icc_df <- data.frame(Condition = icc_cond, Cohort = icc_cohort, Map = icc_map)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 2nd Cohort Left Hemisphere"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4d: ICC analysis for second cohort set right hemispehre
+```{r step4d, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = second_pnn_data_right)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = second_pnn_data_right)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = second_pnn_data_right)
+
+# Making a data frame
+icc_df <- data.frame(Condition = icc_cond, Cohort = icc_cohort, Map = icc_map)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 2nd Cohort Right Hemisphere"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4e: ICC analysis of each set of first cohort set with hemispheres together
+```{r step4e, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = first_pnn_data)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = first_pnn_data)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = first_pnn_data)
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = first_pnn_data)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 1st Cohort Both Hemispheres"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4f: ICC analysis for second cohort set with hemispheres together
+```{r step4f, echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = second_pnn_data)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = second_pnn_data)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = second_pnn_data)
+
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = second_pnn_data)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 2nd Cohort Both Hemispheres"
+    # subtitle = "Intraclass Correlation Coefficient (ICC) for  second set of cohorts both hemispheres PNN data."
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  )
+```
+
+## Step 4g: Third cohort set ICC analysis 
+```{r step4g, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = third_pnn_data_left)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = third_pnn_data_left)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = third_pnn_data_left)
+
+# Making a data frame
+icc_df <- data.frame(Condition = icc_cond, Cohort = icc_cohort, Map = icc_map)
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 3rd Cohort Set Left Hemisphere"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4h: ICC for third cohort set right hemisphere
+```{r step4h, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = third_pnn_data_right)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = third_pnn_data_right)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = third_pnn_data_right)
+
+# Making a data frame
+icc_df <- data.frame(Condition = icc_cond, Cohort = icc_cohort, Map = icc_map)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 3rd Cohort Set Right Hemisphere"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+## Step 4i: ICC analysis of third set of cohorts hemispheres together
+```{r step4i, fig.align='center', echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = third_pnn_data)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = third_pnn_data)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = third_pnn_data)
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = third_pnn_data)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for S1BF 3rd Cohort Both Hemispheres"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  ) %>%
+  tab_options(heading.align = "center")
+```
+
+
+
+## Step 5a: ICC Analysis Conclusion: Based on the ICC analysis we see that it appears `Cohort` is a possible source of confounding for the PNN data. Given this we will build a linear mixed effects model to account for the possible confounding of `Cohort` and see if it changes the signficance of the results. This continues to be seen in our third set of cohorts. 
+
+
+## We start with the left hemisphere data from the first set of cohorts that has a `Cohort` ICC of 0.6671297
+```{r step5a, warning=FALSE, message=FALSE, echo=FALSE}
+# The linear-mixed-effects model
+# The fixed effect is the Condition variable. The random variable is Cohort
+lme_mod <- lme(Mean.2 ~ Condition, data = first_pnn_data_left, random = ~ 1 | Cohort)
+
+lme_mod_sum_left <- modelsummary(
+  title = "First Cohort Set Left Hemisphere",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+```{r step5a displayed, echo=FALSE}
+lme_mod_sum_left
+```
+
+## Step 5b: LME for right hemisphere data from first set of cohorts with an ICC of 0.5287673
+```{r step5b, echo=FALSE, warning=FALSE, message=FALSE}
+lme_mod <- lme(Mean.2 ~ Condition, data = first_pnn_data_right, random = ~ 1 | Cohort)
+
+lme_mod_sum_right <- modelsummary(
+  title = "First Cohort Set Right Hemisphere",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+```{r step5b displayed, echo=FALSE}
+lme_mod_sum_right
+```
+
+## Step 5c: LME for left hemisphere data from second set of cohorts with an ICC of 0.59472
+```{r step5c, echo=FALSE, warning=FALSE, message=FALSE}
+lme_mod <- lme(Mean.2 ~ Condition, data = second_pnn_data_left, random = ~ 1 | Cohort)
+
+lme_mod_sum_left_second <- modelsummary(
+  title = "Second Cohort Set Left Hemisphere",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+```{r step5c displayed, echo=FALSE}
+lme_mod_sum_left_second
+```
+
+## Step 5d: LME for right hemisphere data from second set of cohorts with an ICC of 0.464205
+```{r step5d, echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold'}
+lme_mod <- lme(Mean.2 ~ Condition, data = second_pnn_data_right, random = ~ 1 | Cohort)
+
+lme_mod_sum_right_second <- modelsummary(
+  title = "Second Cohort Set Right Hemisphere",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+
+```{r step5d displayed, echo=FALSE}
+lme_mod_sum_right_second
+```
+
+
+
+
+
+## Step 5e: LME for both hemispheres together for second set of cohorts for figure 9c of the pre-print
+```{r step5e, echo=FALSE, warning=FALSE, message=FALSE}
+second_pnn_data <- filter(second_pnn_data, Subregion == "S1BF" & Condition %in% c("NH", "NW"))
+second_pnn_data$Area <- as.numeric(second_pnn_data$Area)
+lme_mod <- lme(Mean.2 ~ Condition, data = second_pnn_data, random = ~ 1 | Cohort)
+
+lme_mod_sum_second_overall <- modelsummary(
+  title = "Figure 9c LME with NO #021620 Cohort",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc|ICC",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+
+
+
+
+
+
+
+
+
+```{r displaying step5e, echo=FALSE, warning=FALSE, message=FALSE}
+lme_mod_sum_second_overall
+```
+
+## Step 5f: LME for left hemisphere data from third set of cohorts with an ICC of 0.5090678
+```{r step5f, echo=FALSE, warning=FALSE, message=FALSE}
+lme_mod <- lme(Mean.2 ~ Condition, data = third_pnn_data_left, random = ~ 1 | Cohort)
+
+lme_mod_sum_left_third <- modelsummary(
+  title = "Third Cohort Set Left Hemisphere",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+```{r step5f displayed, echo=FALSE}
+lme_mod_sum_left_third
+```
+
+## Step 5g: LME for right hemisphere data from second set of cohorts with an ICC of 0.4024758
+```{r step5g, echo=FALSE, warning=FALSE, message=FALSE}
+lme_mod <- lme(Mean.2 ~ Condition, data = third_pnn_data_right, random = ~ 1 | Cohort)
+
+lme_mod_sum_right_third <- modelsummary(
+  title = "Third Cohort Set Right Hemisphere",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+
+
+
+
+
+```{r step5g displayed, echo=FALSE}
+lme_mod_sum_right_third
+```
+
+
+
+
+
+
+
+
+## Step 5h: LME for both hemispheres together for third set of cohorts for figure 9c of the pre-print
+```{r step5h, echo=FALSE, warning=FALSE, message=FALSE}
+third_pnn_data <- filter(third_pnn_data, Subregion == "S1BF" & Condition %in% c("NH", "NW"))
+third_pnn_data$Area <- as.numeric(third_pnn_data$Area)
+lme_mod <- lme(Mean.2 ~ Condition, data = third_pnn_data, random = ~ 1 | Cohort)
+
+lme_mod_sum_third_overall <- modelsummary(
+  title = "Figure 9c LME with #021620 Data included",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc|ICC",
+  coef_rename = c("ConditionNW" = "Condition")
+)
+```
+
+
+
+
+
+
+```{r displaying step5h, echo=FALSE, warning=FALSE, message=FALSE}
+lme_mod_sum_third_overall
+```
+
+
+
+
+## Step 6a: LME conclusion: Using LMEs does not change the statistics of the comparision between `NH` and `NW` when accounting for the confounding of `Cohort`. This could change once Logan uploads the additional cohorts but as of right now our PNN results still match theirs from Figure 9c in the pre-print to the level that we can match them. Our conclusions (and their conclusions) continue to hold after adding the #021620 cohort data and re-running the analysis (seen in the Figure 9c LME model results and its accompying plot).
+```{r step6a, echo=FALSE, warning=FALSE, message=FALSE}
+fig9_data <- third_pnn_data
+pnn_data_s1bf <- filter(fig9_data, Subregion == "S1BF" & Condition %in% c("NW", "NH"))
+pnn_data_s1bf$Condition <- gsub(x = pnn_data_s1bf$Condition, pattern = "NW", replacement = "WT")
+pnn_data_s1bf$Condition <- gsub(x = pnn_data_s1bf$Condition, pattern = "NH", replacement = "Het")
+pnn_data_s1bf$Area <- as.numeric(pnn_data_s1bf$Area)
+
+
+# Performing the statistics test
+# wilcox_test(data = pnn_data_s1bf, Area~Condition, detailed = TRUE)
+```
+
+```{r step6b (fig9-plot), fig.show='hold', echo=FALSE}
+# PNN Figure 9 Plot
+
+# Factoring the levels to control which order they are in
+pnn_data_s1bf$Condition <- factor(pnn_data_s1bf$Condition, levels = c("WT", "Het"))
+
+# Stats label for plot
+overall_label <- create_test_label(
+  description = "T-test",
+  statistic.text = quote(italic(T)),
+  statistic = -0.5, p = "0.4", n = 369,
+  detailed = TRUE, type = "expression"
+)
+
+fig_9 <- ggplot(aes(x = Condition, y = Mean.2, fill = Cohort), data = pnn_data_s1bf) +
+  geom_violin(colour = "black", fill = "white", draw_quantiles = c(0.25, 0.50, 0.75)) +
+  theme(
+    panel.background = element_blank(),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(face = "bold", size = 20),
+    legend.position = "right"
+  ) +
+  xlab("") +
+  ylab("PNN Intensity") +
+  # ylab(bquote("PNN Density ("~ mm^2 ~")"))+
+  geom_signif(y_position = 92, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2) +
+  ggtitle("Adolescant") +
+  labs(subtitle = overall_label)
+
+
+fig_9 <- fig_9 + scale_x_discrete(
+  breaks = c("WT", "Het"),
+  labels = c(
+    "WT \n(n = 183)",
+    "Het \n(n = 186)"
+  )
+)
+
+
+pnn_coh1_wt <- filter(pnn_data_s1bf, Cohort == "102319" & Condition == "WT")
+pnn_coh1_het <- filter(pnn_data_s1bf, Cohort == "102319" & Condition == "Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1bf, Cohort == "103119" & Condition == "WT")
+pnn_coh2_het <- filter(pnn_data_s1bf, Cohort == "103119" & Condition == "Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1bf, Cohort == "121119A" & Condition == "WT")
+pnn_coh3_het <- filter(pnn_data_s1bf, Cohort == "121119A" & Condition == "Het")
+
+pnn_coh4_wt <- filter(pnn_data_s1bf, Cohort == "121119B" & Condition == "WT")
+pnn_coh4_het <- filter(pnn_data_s1bf, Cohort == "121119B" & Condition == "Het")
+
+pnn_coh5_wt <- filter(pnn_data_s1bf, Cohort == "21620" & Condition == "WT")
+pnn_coh5_het <- filter(pnn_data_s1bf, Cohort == "21620" & Condition == "Het")
+
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "102319"), data = pnn_coh1_wt
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "102319"), data = pnn_coh1_het
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "103119"), data = pnn_coh2_wt
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "103119"), data = pnn_coh2_het
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "121119A"), data = pnn_coh3_wt
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "121119A"), data = pnn_coh3_het
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "121119B"), data = pnn_coh4_wt
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "121119B"), data = pnn_coh4_het
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "21620"), data = pnn_coh5_wt
+)
+
+fig_9 <- fig_9 + stat_summary(
+  fun = mean, geom = "point", shape = 21,
+  size = 5, aes(fill = "21620"), data = pnn_coh5_het
+)
+
+
+
+fig_9 <- fig_9 + scale_fill_manual(values = c(
+  "102319" = "blue",
+  "103119" = "purple",
+  "121119A" = "green",
+  "121119B" = "magenta",
+  "21620" = "orange"
+))
+```
+
+
+```{r displaying step6b, echo=FALSE}
+fig_9
+```
+
+```{r saving step6b, echo=FALSE}
+ggsave(fig_9,
+  device = "svg", dpi = 300, width = 15, height = 15, units = "cm",
+  filename = "~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Figures/fig9c.svg"
+)
+```
+
+
+## Step 7a: Combining both hemispheres, all cohorts, and all conditions together to perform overall ICC analysis
+```{r step7a, echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = all_pnn_data)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = all_pnn_data)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = all_pnn_data)
+
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = all_pnn_data)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for all cohorts, both hemispheres, and all conditions"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  )
+```
+
+
+## Step 7b: Combining both hemispheres and all cohorts for just the naive (NH, NW) samples to perform ICC analysis
+```{r step 7b, echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = all_pnn_data_naive)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = all_pnn_data_naive)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = all_pnn_data_naive)
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = all_pnn_data_naive)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for all cohorts, both hemispheres, and just naive conditions"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  )
+```
+
+## Step 7c: ICC analysis for all sets of cohorts with just S1BF subregion selected
+```{r step7c, echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = all_pnn_data_s1bf)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = all_pnn_data_s1bf)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = all_pnn_data_s1bf)
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = all_pnn_data_s1bf)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for all cohorts, both hemispheres, and all conditions with just S1BF subregion"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  )
+```
+
+## Step 7d: ICC analysis for all sets of cohorts with just naive conditions and  just S1BF subregion selected
+```{r step7d, echo=FALSE}
+# For Condition
+icc_cond <- ICCbare(x = factor(Condition), y = Mean.2, data = all_pnn_data_naive_s1bf)
+# For Map ID
+icc_map <- ICCbare(x = factor(Map.ID), y = Mean.2, data = all_pnn_data_naive_s1bf)
+# For Cohort
+icc_cohort <- ICCbare(x = factor(Cohort), y = Mean.2, data = all_pnn_data_naive_s1bf)
+# For Hemisphere
+icc_hemi <- ICCbare(x = factor(Hemisphere), y = Mean.2, data = all_pnn_data_naive_s1bf)
+
+# Making a data frame
+icc_df <- data.frame(
+  Condition = icc_cond, Cohort = icc_cohort, Map = icc_map,
+  Hemisphere = icc_hemi
+)
+
+
+# Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>%
+  tab_header(
+    title = "ICC for all cohorts, both hemispheres, and just naive conditions with just S1BF subregion"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("Condition", "Cohort", "Map", "Hemisphere")
+  )
+```
+
+
+
+
+## Step 8a: LME for all cohorts, conditions, and hemispheres
+```{r step8a, echo=FALSE}
+lme_mod <- lme(Mean.2 ~ Condition, data = all_pnn_data, random = ~ 1 | Cohort)
+
+lme_mod_sum_overall <- modelsummary(
+  title = "All conditions, cohorts, and hemispheres LME",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc|ICC",
+  coef_rename = c(
+    "ConditionNW" = "NW",
+    "ConditionSW" = "SW",
+    "ConditionNH" = "NH",
+    "ConditionSH" = "SH"
+  )
+)
+```
+
+```{r displaying step8a, echo=FALSE}
+lme_mod_sum_overall
+```
+
+## Step 8b: LME for all cohorts, hemispheres, and just naive samples
+```{r step8b, echo=FALSE}
+lme_mod <- lme(Mean.2 ~ Condition, data = all_pnn_data_naive, random = ~ 1 | Cohort)
+
+lme_mod_sum_overall_naive <- modelsummary(
+  title = "All cohorts, hemispheres, and just naive conditions LME",
+  lme_mod,
+  fmt = 1,
+  estimate = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = c(
+    "p-value = {p.value}",
+    "t = {statistic}"
+  ),
+  gof_omit = "R2 Marg.|R2 Cond|AIC|BIC|RMSE|aicc|ICC",
+  coef_rename = c(
+    "ConditionNW" = "NW",
+    "ConditionNH" = "NH"
+  )
+)
+```
+
+
+```{r displaying step8b, echo=FALSE}
+lme_mod_sum_overall_naive
+```

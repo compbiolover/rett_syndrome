@@ -1,0 +1,370 @@
+---
+title: "Second Cohort PNN Analysis"
+author: "Andrew Willems and Tian Hong"
+date: "4/05/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+
+We are doing analysis on the new set of cohorts from the Krishnan lab. First, we do regular t-tests and generate heat maps. Second, we use our linear mixed model to perform analysis and generate heat maps if needed.The need will be determined by the ICC values of the Cohort and Map variables. 
+
+## Step One
+Load needed packages. emmeans is used to perform the pairwise analysis. gt is used for making the nice tables. ICC is used to calculate the intraclass correlation coefficient to tell us if we can treat our predictors (variables) as independent or not. Magrittr is a package that allows us to use pipes (%>%) in our code. modelsummary allows us to make our linear mixed effects (lme) model output more professional looking. nlme is the package that performs the lme model fit. Rstatix is used to do the pairwise t-tests and p-value correction. Tidyverse is used for data manipulation. webshot is used to save our gt tables as .png files.
+```{r message=FALSE}
+#Loading needed packages
+library(emmeans)
+library(gt)
+library(ICC)
+library(magrittr)
+library(modelsummary)
+library(nlme)
+library(rstatix)
+library(tidyverse)
+library(webshot)
+```
+
+## Step Two
+Load the data and make separate data frames that are comprised of only left or right hemisphere data. We see here that we only have 2 cohorts. Not sure if they are new or not. They have the same cohort identification as 2 cohorts from the first analysis (102319, 121119B). We do see that in this second analysis the 102319 cohort is much larger (845 here vs. 171 from first analysis). The 121119B cohort is only slightly larger (178 here vs. 138 in the first analysis). There are no 103119 cohort members present in this second analysis. 
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2)}
+# Loading the data
+setwd("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/")
+pnn_data <- read.csv("processed_data_PNN_031022.csv", sep = "\t")
+pnn_data_left <- filter(pnn_data, Hemisphere == "Left")
+pnn_data_right <- filter(pnn_data, Hemisphere == "Right")
+head(pnn_data, n = 22)
+head(pnn_data_left)
+head(pnn_data_right)
+table(pnn_data$Cohort)
+```
+
+## Step Three
+Look at how many of each condition we have in our data. If we don't have very many we will need to use a common standard deviation in our t-test.
+```{r}
+#Make table to look at how many of each condition we have to know if we need to
+#use pooled standard deviation in our t-test
+table(pnn_data_left$Condition)
+table(pnn_data_right$Condition)
+```
+
+## Step Four
+We have large enough values per group to set the pooled standard deviation to false for the t-test. Performing a simple calculation to determine if we need to do p-value adjustment or not because of running multiple tests. For reference on formula see Goldman tutorial doc (sent in Slack) and Jafari et al.
+(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6099145/)
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), out.width="50%"}
+#Performing a simple calculation to determine if we need to do p-value
+#adjustment or not because of running multiple tests. For reference on formula
+#see Goldman tutorial doc (sent in Slack) and Jafari et al.
+#(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6099145/)
+
+#We have 4 condition (NH, NW, SH, SW)
+rate_of_false_positives <- rep(0, 3)
+rate_of_false_positives[1] <- 1-(1 - 0.05)^4
+rate_of_false_positives[2] <- 1-(1 - 0.01)^4
+rate_of_false_positives[3] <- 1-(1 - 0.001)^4
+
+p_values <- c(0.05, 0.01, 0.001)
+fp_table <- data.frame(p_values, rate_of_false_positives)
+colnames(fp_table) <- c("P-value", "False Positive Rate")
+fp_table <- gt(fp_table)
+fp_table %>% tab_header(
+  title = "Uncorrected P-value Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("P-value", "False Positive Rate")
+) %>% fmt_percent(
+  columns = "False Positive Rate",
+  decimals = 1
+)
+```
+
+## Step Five
+Do pairwise t-test for left hemisphere. Our comparison is condition (NH, SH, NW, SW) and how they relate to Mean 2. We set a more stringent alpha threshold for the p-value (0.01 vs. 0.05) because of the nearly 20% false positive rate calculated in step four. We set detailed to TRUE so that we get the most verbose output we can.   
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2)}
+#Subsetting to each individual combination to get same layout as seen in 
+#previous analysis
+pnn_data_left_sh_sw <- filter(pnn_data_left, Condition=="SH" | Condition=="SW")
+pnn_data_left_sh_nh <- filter(pnn_data_left, Condition=="SH" | Condition=="NH")
+pnn_data_left_sh_nw <- filter(pnn_data_left, Condition=="SH" | Condition=="NW")
+pnn_data_left_nh_nw <- filter(pnn_data_left, Condition=="NH" | Condition=="NW")
+pnn_data_left_nh_sw <- filter(pnn_data_left, Condition=="NH" | Condition=="SW")
+pnn_data_left_nw_sh <- filter(pnn_data_left, Condition=="NW" | Condition=="SH")
+pnn_data_left_nw_sw <- filter(pnn_data_left, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = pnn_data_left_sh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh <- t_test(data = pnn_data_left_sh_nh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- 0.751
+
+sh_nw <- t_test(data = pnn_data_left_sh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- 7.97
+
+nh_nw <- t_test(data = pnn_data_left_nh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw <- t_test(data = pnn_data_left_nh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -7.42
+
+nw_sh <- t_test(data = pnn_data_left_nw_sh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw <- t_test(data = pnn_data_left_nw_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -1.52
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+
+pwc_left_mean2_gt <- left_hemi_df
+
+colnames(pwc_left_mean2_gt) <- c("Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic", "DF", "P-value", 
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_mean2_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic", "DF", "P-value", 
+              "P-value Significance")) %>%
+  tab_options(
+    container.width = 2000
+  )
+
+pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+gtsave(pwc_left_table, filename = "pwc_left_table_second_cohort.png",
+       path = "Figures/Tables/", vwidth=2000)
+```
+
+## Do same as above but for right hemisphere data.
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2)}
+#Subsetting to each individual combination to get same layout as seen in
+#previous analysis
+pnn_data_right_sh_sw <- filter(pnn_data_right, Condition=="SH" | Condition=="SW")
+pnn_data_right_sh_nh <- filter(pnn_data_right, Condition=="SH" | Condition=="NH")
+pnn_data_right_sh_nw <- filter(pnn_data_right, Condition=="SH" | Condition=="NW")
+pnn_data_right_nh_nw <- filter(pnn_data_right, Condition=="NH" | Condition=="NW")
+pnn_data_right_nh_sw <- filter(pnn_data_right, Condition=="NH" | Condition=="SW")
+pnn_data_right_nw_sh <- filter(pnn_data_right, Condition=="NW" | Condition=="SH")
+pnn_data_right_nw_sw <- filter(pnn_data_right, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = pnn_data_right_sh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh <- t_test(data = pnn_data_right_sh_nh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- -2.91
+
+sh_nw <- t_test(data = pnn_data_right_sh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- 5.55
+
+nh_nw <- t_test(data = pnn_data_right_nh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw <- t_test(data = pnn_data_right_nh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -8.88
+
+nw_sh <- t_test(data = pnn_data_right_nw_sh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw <- t_test(data = pnn_data_right_nw_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- 0.712
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1, levels = c("NH", "SW",
+                                                                "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2, levels = c("SW", "NH",
+                                                                "NW"))
+
+
+pwc_right_mean2_gt <- right_hemi_df
+
+colnames(pwc_right_mean2_gt) <- c("Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic", "DF", "P-value", 
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_mean2_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic", "DF", "P-value", 
+              "P-value Significance"))
+
+pwc_right_table
+
+```
+```{r fig.show='hide'}
+#Saving the table as a .png file for easy insertion into PowerPoints
+gtsave(pwc_right_table, filename = "pwc_right_table_second_cohort.png",
+       path = "Figures/Tables/", vwidth=2000)
+```
+
+## Step Six: Plotting the heatmap of the left hemisphere data.
+```{r figures-side, fig.show="hold", out.width="50%"}
+#Heatmap for Mean 2 left hemisphere
+mid <- 0
+
+
+left_heatmap <-ggplot(data = left_hemi_df, aes(x=group1, y=group2,
+                                               fill=statistic))+
+  geom_tile()+
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+        legend.key.height = unit(60, units = "pt"))+
+  ggtitle("Mean 2 Left")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/new_left_cohort_t_test.svg",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+knitr::include_graphics("~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/old_left_cohort_t_test_0_99.png")
+```
+
+## Plotting the heatmap of the right hemisphere data.
+```{r figures-side2, fig.show="hold", out.width="50%"}
+#Heatmap for Mean 2 right hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df, aes(x=group1, y=group2,
+                                                 fill=statistic))+
+  geom_tile()+
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+        legend.key.height = unit(60, units = "pt"))+
+  ggtitle("Mean 2 Right")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/new_right_cohort_t_test.svg",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+knitr::include_graphics("~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/old_right_cohort_t_test_0_99.png")
+```
+
+## Mean 2 Left and Right from previous analysis when set to the same alpha threshold of 0.99.
+
+When comparing both left and right hemispheres between this set of cohorts and the previous set of cohorts we get what I consider reasonable results. We see that there are some differences between this set of cohorts and the previous set of cohorts. We see that in many cases we see greater statistical significance in this new cohort. This makes sense to me as there are many more mice in the 102319 and a few more mice in the 121119B cohort. The results make sense to me as we would expect to see differences between NH and NW and SH and SW as we would hope to see differences between these cohorts. It also makes sense to me that we would see no differences between NW and SW as they are both wild type mice and we are trying to minimize differences in our control group. It also follows that we would hope to see differences between the NW and SH groups and between the NH and SH groups
+
+
+## Step Seven: Begin Left Hemisphere analysis. 
+We start be using the Intraclass correlation coefficient (ICC) to determine if the variables Condition, Map ID, or Cohort are truly independent or not. I use the ICCbare command with x representing the grouping variable of interest and y representing the Mean 2 variable
+```{r}
+#Left hemisphere analysis
+#Intraclass correlation coefficient (ICC) 
+#For Condition
+icc_cond=ICCbare(x=factor(Condition), y= Mean.2,data = pnn_data_left)
+#For Map ID
+icc_map=ICCbare(x=factor(Map.ID), y= Mean.2,data = pnn_data_left)
+#For Cohort
+icc_cohort=ICCbare(x=factor(Cohort), y= Mean.2,data = pnn_data_left)
+
+#Making a data frame
+icc_df <- data.frame(Condition=icc_cond, Cohort=icc_cohort, Map=icc_map)
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for left hemisphere PNN data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Condition", "Cohort", "Map")
+ )
+
+```
+Here we see that in this new cohort we get very small ICC values for Cohort and Map and consider these variables independent. This time we see that Condition has some meaningful level of correlation. We might want to investigate why we see such large differences in the cohort variable ICCs from the last cohort compared to this cohort. 
+
+## Step Eight: Doing all of the same anlyses we did above but on right hemisphere data
+```{r}
+#Right hemisphere analysis
+#Intraclass correlation coefficient (ICC)
+icc_cond=ICCbare(x=factor(Condition), y= Mean.2,data = pnn_data_right)
+icc_map=ICCbare(x=factor(Map.ID), y= Mean.2,data = pnn_data_right)
+icc_cohort=ICCbare(x=factor(Cohort), y= Mean.2,data = pnn_data_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Condition=icc_cond, Cohort=icc_cohort, Map=icc_map)
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for right hemisphere PNN data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Condition", "Cohort", "Map")
+ )
+```
+## Right hemisphere ICC conclusion
+Once again we see that both cohort and map have very small ICC values and can be considered independent. This new set of cohorts stands in contrast to the first set of cohorts which had large ICC values for cohort which indicated a need to consider them as random effects in a mixed effects model. We might want to try and determine why there is such a difference between the two sets of cohorts that we have analyzed.  
+
+## Overall Conclusion
+The Cohort variable in this new set of cohorts is independent and therefore should not be considered as a random effect in a mixed effects model. This could be driven by the much larger number of mice in the 102319 cohort. Since we are directly evaluating the effect of Condition it is fine that it has a fairly large ICC value. I would advise using a p-value of 0.01 to make judgments about significance instead of 0.05 because its type 1 error rate (3.9%) is much closer to our anticipated error rate of 1% than the alpha value of 0.05 which gives an estimated type 1 error rate of nearly 20%. I can do some reading to try and determine if using FDR correction on 0.05 or using a 0.01 p-value is the better option. Our t-test results from this cohort makes sense to me when comparing them to the previous set of cohorts. The results from this second set of cohorts indicate even better results than our first set of cohorts. This is probably because of the much larger 102319 cohort and the slightly larger 121119B cohort. This second set of cohorts eliminates the differences seen in the first set of cohorts between NW and SW which make sense to me. We would imagine that our baseline's/controls would not be different from each other in a statistically significant way. We see greater statistical significance between NH and NW, SH and SW which I find logical and encouraging. This more strongly supports that their are concrete differences between the wild types and the 'treatment' groups. We should look at effect sizes to quantify the magnitude of the differences as a future direction. We should probably also construct 95% confidence intervals to make our conclusions even stronger as this will give us a good idea of if the intervals overlap or not.      
+

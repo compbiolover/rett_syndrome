@@ -1,0 +1,670 @@
+---
+title: "MECP2 Analysis"
+author: "Andrew Willems and Tian Hong"
+date: "4/25/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Objective
+We are doing  analysis on the new set of cohorts from the Krishnan lab for MECP2. First, we use intraclass correlation coefficient (ICC) values of the Cohort, Cell type, Cell number, and Image variables to determine if we need to build linear mixed effects models. After investigating if we need LMEs we then create heat maps of the MECP2 data. We compare the differences in means between the various conditions.
+
+## Step One
+Load needed packages. `effectsize` is used to calculate the effect sizes of the differences in our various conditions/treatments. `ggforce` is used to make the sina plots. `ggpubr` is for the grouped plot support. `ggsignif` is used to add statistical results to ggplot plots. `gt` is used for making the nice tables. `ICC` is used to calculate the intraclass correlation coefficient to tell us if we can treat our predictors (variables) as independent or not. `magrittr` is a package that allows us to use pipes (%>%) in our code. `mclust` allows us to build Gaussian mixture models (GMMs) and calculate the mean intensity of the neurons of interest. `modelsummary` allows us to make our linear mixed effects (lme) model output more professional looking. `nlme` is the package that performs the linear mixed effects (lme) model fits. `rstatix` is used to do the pairwise t-tests and p-value correction. `tidyverse` is used for data manipulation. `webshot` is used to save our gt tables as .png files.
+
+```{r message=FALSE, echo=FALSE}
+#Loading needed packages
+library(effectsize)
+library(ggforce)
+library(ggpubr)
+library(ggsignif)
+library(gt)
+library(ICC)
+library(magrittr)
+library(mclust)
+library(modelsummary)
+library(nlme)
+library(rstatix)
+library(tidyverse)
+library(webshot)
+```
+
+## Step Two
+Load the data and make separate data frames that are comprised of only left or right hemisphere data. The warning here is okay. When I make all columns numeric it introduces some NAs because not all columns have the same number of rows (some just have no data in that row and therefore they get an NA). I fill those NAs in with a 0. 
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, results='hide', eval=TRUE, warning=FALSE}
+#Loading the data
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Data")
+mecp2_data <- read.csv("mecp2_raw_histogram_data.csv", sep = ",")
+mecp2_metadata_6wk <- mecp2_data[1:6,1:380]
+mecp2_metadata_12wk <- mecp2_data[1:6,381:816]
+mecp2_intensity <- mecp2_data[7:2164,2:817]
+mecp2_intensity_6wk <- mecp2_intensity[,1:380]
+mecp2_intensity_12wk <- mecp2_intensity[,381:816]
+
+mecp2_intensity_6wk <- apply(mecp2_intensity_6wk, 2, as.numeric)
+mecp2_intensity_12wk <- apply(mecp2_intensity_12wk, 2, as.numeric)
+
+mecp2_intensity_6wk[is.na(mecp2_intensity_6wk)] <- 0
+mecp2_intensity_12wk[is.na(mecp2_intensity_12wk)] <- 0
+
+mecp2_data_processed_6wk <- data.frame(Cell_type=as.character(mecp2_metadata_6wk[1,]),
+                                   Cohort=as.character(mecp2_metadata_6wk[2,]),
+                                   Condition=as.character(mecp2_metadata_6wk[3,]),
+                                   Hemisphere=as.character(mecp2_metadata_6wk[4,]),
+                                   Image=as.character(mecp2_metadata_6wk[5,]),
+                                   Cell_number=as.character(mecp2_metadata_6wk[6,]))
+
+
+mecp2_data_processed_12wk <- data.frame(Cell_type=as.character(mecp2_metadata_12wk[1,]),
+                                   Cohort=as.character(mecp2_metadata_12wk[2,]),
+                                   Condition=as.character(mecp2_metadata_12wk[3,]),
+                                   Hemisphere=as.character(mecp2_metadata_12wk[4,]),
+                                   Image=as.character(mecp2_metadata_12wk[5,]),
+                                   Cell_number=as.character(mecp2_metadata_12wk[6,]))
+
+
+
+mecp2_data_processed_6wk <- mecp2_data_processed_6wk[2:817,]
+mecp2_data_processed_12wk <- mecp2_data_processed_12wk[2:817,]
+
+head(mecp2_data_processed_6wk)
+head(mecp2_data_processed_12wk)
+dim(mecp2_data_processed_6wk)
+dim(mecp2_data_processed_12wk)
+```
+
+## Step Three: Building Gaussian Mixed Model (GMMs) for all of our data
+Six week old data. We have a single mean intensity calculated for each sample
+```{r message=FALSE, fig.show='hide', echo=FALSE, eval=TRUE, warning=FALSE}
+#Doing density estimates for each of the columns of our data frame to get 
+#means for further analysis for 6wk data
+gmm_mod_6wk <- apply(mecp2_intensity_6wk, 2, densityMclust, G = 1, 
+                     modelNames=c("E", "V"))
+```
+
+Twelve week old data. We have a single mean intensity calculated for each sample
+```{r message=FALSE, fig.show='hide', echo=FALSE, eval=TRUE, warning=FALSE}
+#Doing density estimates for each of the columns of our data frame to get 
+#means for further analysis for 12wk data
+gmm_mod_12wk <- apply(mecp2_intensity_12wk, 2, densityMclust, G = 1,
+                      modelNames=c("E", "V"))
+```
+
+## Step Four: Now plotting and then saving all of the density plots for 6 week year old data 
+```{r echo=FALSE, message=FALSE, eval=TRUE}
+#Plotting the results and saving mean 1 and mean 2 to do more analysis later
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures")
+first_means_6wk <- rep(0, 816)
+second_means_6wk <- rep(0, 816)
+all_plots <- list()
+counter <- 1
+for(gm in gmm_mod_6wk){
+  current_mod <- gm
+  first_means_6wk[counter] <- current_mod$parameters$mean[1]
+  #second_means_6wk[counter] <- current_mod$parameters$mean[2]
+  
+  current_mod_ggplot <- as.data.frame(current_mod$density)
+  colnames(current_mod_ggplot) <- "density"
+  current_mod_ggplot$mean <- first_means_6wk[counter]
+  #current_mod_ggplot$mean2 <- second_means_6wk[counter]
+  density_plot <- ggplot(data = current_mod_ggplot, aes(x=density)) +
+    geom_density(color="blue",
+                 fill= "#87ceeb",
+                 alpha=0.8) +
+    theme(panel.background = element_blank())+
+    xlab("Intensity")+ ylab("Density")
+  len <- length(all_plots)
+  all_plots[[len+1]] <- density_plot
+  
+  ggsave(filename = paste0("density_plot_mecp2_6wk_", len, ".png"), device = "png",
+         dpi = 300, height = 12, width = 12, unit= "cm", plot = density_plot)
+  counter <- counter + 1
+}
+
+```
+
+## Plotting and saving for 12 week old data
+```{r echo=FALSE, message=FALSE, eval=TRUE}
+#Plotting the results and saving mean 1 and mean 2 to do more analysis later
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures")
+first_means_12wk <- rep(0, 816)
+second_means_12wk <- rep(0, 816)
+all_plots <- list()
+counter <- 1
+for(gm in gmm_mod_12wk){
+  current_mod <- gm
+  first_means_12wk[counter] <- current_mod$parameters$mean[1]
+  #second_means_12wk[counter] <- current_mod$parameters$mean[2]
+  
+  current_mod_ggplot <- as.data.frame(current_mod$density)
+  colnames(current_mod_ggplot) <- "density"
+  current_mod_ggplot$mean <- first_means_12wk[counter]
+  #current_mod_ggplot$mean2 <- second_means_12wk[counter]
+  density_plot <- ggplot(data = current_mod_ggplot, aes(x=density)) +
+    geom_density(color="blue",
+                 fill= "#87ceeb",
+                 alpha=0.8) +
+    theme(panel.background = element_blank())+
+    xlab("Intensity")+ ylab("Density")
+  len <- length(all_plots)
+  all_plots[[len+1]] <- density_plot
+  
+  ggsave(filename = paste0("density_plot_mecp2_12wk_", len, ".svg"), device = "svg",
+         dpi = 300, height = 12, width = 12, unit= "cm", plot = density_plot)
+  counter <- counter + 1
+}
+```
+
+
+## Step Five: Adding the means of the GMM to our overall data frames
+```{r, echo=FALSE}
+#Now appending the mean to the other metadata for this MECP2 data set for the
+#6 week and 12 week data frames
+mecp2_data_processed_6wk$Mean <- first_means_6wk
+
+mecp2_data_processed_6wk$Time <- rep("6 wk",
+                                     times=nrow(mecp2_data_processed_6wk))
+head(mecp2_data_processed_6wk)
+
+
+
+mecp2_data_processed_12wk$Mean <- first_means_12wk
+mecp2_data_processed_12wk$Time <- rep("12 wk",
+                                      times=nrow(mecp2_data_processed_12wk))
+head(mecp2_data_processed_12wk)
+```
+
+Now sub-setting our data frame to just NH and NW and then relabeling them as Het or WT. Finally, we factor them in the same order seen in the plot in the pre-print
+```{r, echo=FALSE}
+mecp2_data_processed_6wk_simp <- mecp2_data_processed_6wk
+mecp2_data_processed_6wk_simp <- filter(mecp2_data_processed_6wk_simp,
+                                        Condition=="NH" | Condition=="NW")
+
+mecp2_data_processed_6wk_simp_neg <- filter(mecp2_data_processed_6wk_simp, Cell_type=="PNN-pos")
+mecp2_data_processed_6wk_simp_pos <- filter(mecp2_data_processed_6wk_simp, Cell_type=="PNN-neg")
+
+mecp2_data_processed_6wk_simp_neg$Condition <- gsub(x = mecp2_data_processed_6wk_simp_neg$Condition, pattern = "NH", replacement = "Het")
+mecp2_data_processed_6wk_simp_neg$Condition <- gsub(x = mecp2_data_processed_6wk_simp_neg$Condition, pattern = "NW", replacement = "WT")
+mecp2_data_processed_6wk_simp_pos$Condition <- gsub(x = mecp2_data_processed_6wk_simp_pos$Condition, pattern = "NH", replacement = "Het")
+mecp2_data_processed_6wk_simp_pos$Condition <- gsub(x = mecp2_data_processed_6wk_simp_pos$Condition, pattern = "NW", replacement = "WT")
+
+
+mecp2_data_processed_6wk_simp_neg$Condition <- factor(mecp2_data_processed_6wk_simp_neg$Condition, levels = c("WT", "Het"))
+mecp2_data_processed_6wk_simp_pos$Condition <- factor(mecp2_data_processed_6wk_simp_pos$Condition, levels = c("WT", "Het"))
+```
+
+Doing the same for 12 week old data
+```{r, echo=FALSE}
+mecp2_data_processed_12wk_simp <- mecp2_data_processed_12wk
+
+mecp2_data_processed_12wk_simp <- filter(mecp2_data_processed_12wk_simp,
+                                        Condition=="NH" | Condition=="NW")
+
+mecp2_data_processed_12wk_simp_neg <- filter(mecp2_data_processed_12wk_simp, Cell_type=="PNN-pos")
+mecp2_data_processed_12wk_simp_pos <- filter(mecp2_data_processed_12wk_simp, Cell_type=="PNN-neg")
+
+mecp2_data_processed_12wk_simp_neg$Condition <- gsub(x = mecp2_data_processed_12wk_simp_neg$Condition, pattern = "NH", replacement = "Het")
+mecp2_data_processed_12wk_simp_neg$Condition <- gsub(x = mecp2_data_processed_12wk_simp_neg$Condition, pattern = "NW", replacement = "WT")
+mecp2_data_processed_12wk_simp_pos$Condition <- gsub(x = mecp2_data_processed_12wk_simp_pos$Condition, pattern = "NH", replacement = "Het")
+mecp2_data_processed_12wk_simp_pos$Condition <- gsub(x = mecp2_data_processed_12wk_simp_pos$Condition, pattern = "NW", replacement = "WT")
+
+
+mecp2_data_processed_12wk_simp_neg$Condition <- factor(mecp2_data_processed_12wk_simp_neg$Condition, levels = c("WT", "Het"))
+mecp2_data_processed_12wk_simp_pos$Condition <- factor(mecp2_data_processed_12wk_simp_pos$Condition, levels = c("WT", "Het"))
+```
+
+Now doing all the statistical analysis and plotting for the non-PV Nuclei containing samples
+```{r, echo=FALSE}
+mecp2_6_12_neg <- bind_rows(mecp2_data_processed_6wk_simp_neg, mecp2_data_processed_12wk_simp_neg)
+
+#Not needed to be run every time since we have already saved the file
+# saveRDS(mecp2_6_12_neg,
+#         file = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Data/mecp2_6_12_neg.rds")
+
+#Performing all KW tests for the overall model and then uncorrected Dunn's tests
+#for each of the particular pairwise comparisons in line with collaborator's
+#previous analysis
+
+overall_test <- mecp2_6_12_neg %>% kruskal_test(formula = Mean~Time)
+
+example_of_pwc <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="6 wk") %>%
+  dunn_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+six_wk_comp <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="6 wk") %>%
+  dunn_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+twelve_wk_comp <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="12 wk") %>%
+  dunn_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+#6 week WT v. 6 week Het
+wt_v_wt_comp <- mecp2_6_12_neg %>% group_by(Condition) %>% filter(Condition=="WT") %>%
+  dunn_test(formula = Mean~Time, detailed = TRUE, p.adjust.method = "none")
+
+#6 week Het v. 12 week Het
+het_v_het_comp <- mecp2_6_12_neg %>% group_by(Condition) %>% filter(Condition=="Het") %>%
+  dunn_test(formula = Mean~Time, detailed = TRUE, p.adjust.method = "none")
+
+
+#Effect size and effects size interpretation
+overall_effect_size <- kruskal_effsize(data = mecp2_6_12_neg, 
+                                       formula = Mean~Time, ci = TRUE)
+
+six_wk_eff_size_df <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="6 wk")
+six_wk_eff_size <- hedges_g(data = six_wk_eff_size_df, x = Mean~Condition)
+
+
+
+twelve_wk_eff_size_df <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="12 wk")
+twelve_wk_eff_size <- hedges_g(data = twelve_wk_eff_size_df, x = Mean~Condition)
+
+
+
+wt_v_wt_eff_size_df <- mecp2_6_12_neg %>% group_by(Condition) %>% filter(Condition=="WT")
+wt_v_wt_eff_size <- hedges_g(data = wt_v_wt_eff_size_df, x = Mean~Time)
+
+
+het_v_het_eff_size_df <- mecp2_6_12_neg %>% group_by(Condition) %>% filter(Condition=="Het")
+het_v_het_eff_size <- hedges_g(data = het_v_het_eff_size_df, x = Mean~Time)
+
+overall_test_label <- create_test_label(description = "Kruskal-Wallis",
+                                        statistic.text = quote(italic(chi)^2),
+                                        statistic = 24.23, p = "<0.0001",
+                                        parameter = "1", n = 225,
+                                        effect.size.text = quote(italic(eta)^2),
+                                        effect.size = 0.104, detailed = TRUE,
+                                        type = "expression")
+
+
+#Now back to doing plotting stuff
+mecp2_6_12_neg$Time <- factor(mecp2_6_12_neg$Time, levels = c("6 wk", "12 wk"))
+
+mecp2_6_12_neg$Combo <- paste0(mecp2_6_12_neg$Condition,"_", mecp2_6_12_neg$Time)
+mecp2_6_12_neg$Combo <- factor(mecp2_6_12_neg$Combo, levels = c("WT_6 wk",
+                                                                "Het_6 wk", 
+                                                                "WT_12 wk",
+                                                                "Het_12 wk"))
+
+
+#Plot
+total_plot <- ggplot(aes(x=Combo,y=Mean, fill=Condition), data = mecp2_6_12_neg)+
+  geom_violin()+ theme(panel.background = element_blank(),
+                       plot.title = element_text(hjust = 0.5, face = "bold"),
+                       axis.title = element_text(face = "bold"),
+                       axis.text = element_text(face = "bold"),
+                       legend.position = "none")+
+  ylab("Mean MECP2 Intensity (a.u.)")+
+  xlab("")+
+  geom_sina(seed=123)+
+  ggtitle("Non-PV Nuclei")+
+  geom_signif(y_position = c(1700, 1500), xmin = c(1.0,3.0), xmax = c(2.0,4.0),
+              annotations = c("*", "ns"), tip_length = 0)+
+  geom_signif(y_position = 1875, xmin = 1.0, xmax = 3.0, annotations = "*",
+              tip_length = 0)+
+  geom_signif(y_position = 2000, xmin = 2.0, xmax = 4.0, annotations = "****",
+              tip_length = 0)+
+  labs(
+    subtitle = overall_test_label,
+    caption = get_pwc_label(example_of_pwc)
+    )
+  
+
+total_plot <- total_plot + scale_x_discrete(breaks = c("WT_6 wk","Het_6 wk",
+                                                       "WT_12 wk", "Het_12 wk"),
+                                            labels = c("WT \n(n = 47)", 
+                                                       "Het \n(n = 35)", 
+                                                       "WT \n(n = 60)", 
+                                                       "Het \n(n = 60)"))
+
+total_plot <- total_plot + stat_summary(fun=mean, geom="point", shape=23,
+                                        size=5, color="white", fill="white")
+
+total_plot_non <- total_plot
+```
+
+Now doing all the statistical analysis and plotting for the PV Nuclei containing samples
+```{r, echo=FALSE}
+mecp2_6_12_pos <- bind_rows(mecp2_data_processed_6wk_simp_pos, mecp2_data_processed_12wk_simp_pos)
+
+#Only need to run this once because we are saving the data frame
+# saveRDS(mecp2_6_12_pos,
+#         file = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Data/mecp2_6_12_pos.rds")
+
+
+#Performing all the same statistical tests and comparisons for the 12 week data
+#that we did on the six week data
+overall_test <- mecp2_6_12_pos %>% kruskal_test(formula = Mean~Time)
+
+example_of_pwc <- mecp2_6_12_pos %>% group_by(Time) %>% filter(Time=="6 wk") %>% 
+  dunn_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+six_wk_comp <- mecp2_6_12_pos %>% group_by(Time) %>% filter(Time=="6 wk") %>%
+  dunn_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+twelve_week_comp <- mecp2_6_12_pos %>% group_by(Time) %>% filter(Time=="12 wk") %>%
+  dunn_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+wt_v_wt_comp <- mecp2_6_12_pos %>% group_by(Condition) %>% filter(Condition=="WT") %>%
+  dunn_test(formula = Mean~Time, detailed = TRUE, p.adjust.method = "none")
+
+het_v_het_comp <- mecp2_6_12_pos %>% group_by(Condition) %>% filter(Condition=="Het") %>% 
+  dunn_test(formula = Mean~Time, detailed = TRUE, p.adjust.method = "none")
+
+
+#Effect size and effects size interpretation
+overall_effect_size <- kruskal_effsize(data = mecp2_6_12_pos,
+                                       formula = Mean~Time, ci = TRUE)
+
+six_wk_eff_size_df <- mecp2_6_12_pos %>% group_by(Time) %>% filter(Time=="6 wk")
+six_wk_eff_size <- hedges_g(data = six_wk_eff_size_df, x = Mean~Condition)
+
+
+
+twelve_wk_eff_size_df <- mecp2_6_12_pos %>% group_by(Time) %>% filter(Time=="12 wk")
+twelve_wk_eff_size <- hedges_g(data = twelve_wk_eff_size_df, x = Mean~Condition)
+
+
+
+wt_v_wt_eff_size_df <- mecp2_6_12_pos %>% group_by(Condition) %>% filter(Condition=="WT")
+wt_v_wt_eff_size <- hedges_g(data = wt_v_wt_eff_size_df, x = Mean~Time)
+
+
+het_v_het_eff_size_df <- mecp2_6_12_pos %>% group_by(Condition) %>% filter(Condition=="Het")
+het_v_het_eff_size <- hedges_g(data = het_v_het_eff_size_df, x = Mean~Time)
+
+overall_test_label <- create_test_label(description = "Kruskal-Wallis", 
+                                        statistic.text = quote(italic(chi)^2), 
+                                        statistic = 0.15, p = "0.7", 
+                                        parameter = "1", n = 188, 
+                                        effect.size.text = quote(italic(eta)^2),
+                                        effect.size = -0.00456, 
+                                        detailed = TRUE, type = "expression")
+
+
+
+#Now back to plotting stuff
+mecp2_6_12_pos$Time <- factor(mecp2_6_12_pos$Time, levels = c("6 wk", "12 wk"))
+
+mecp2_6_12_pos$Combo <- paste0(mecp2_6_12_pos$Condition,"_", mecp2_6_12_pos$Time)
+mecp2_6_12_pos$Combo <- factor(mecp2_6_12_pos$Combo, levels = c("WT_6 wk", 
+                                                                "Het_6 wk", 
+                                                                "WT_12 wk",
+                                                                "Het_12 wk"))
+
+
+#Plot
+total_plot <- ggplot(aes(x=Combo,y=Mean, fill=Condition), data = mecp2_6_12_pos)+
+  geom_violin()+ theme(panel.background = element_blank(),
+                       plot.title = element_text(hjust = 0.5, face = "bold"),
+                       axis.title = element_text(face = "bold"),
+                       axis.text = element_text(face = "bold"),
+                       legend.position = "none")+
+  ylab("Mean MECP2 Intensity (a.u.)")+
+  xlab("")+
+  geom_sina(seed=123)+
+  ggtitle("PV Nuclei")+
+  geom_signif(y_position = c(4300, 4000), xmin = c(1.0,3.0), xmax = c(2.0,4.0),
+              annotations = c("ns", "ns"), tip_length = 0)+
+  geom_signif(y_position = 4750, xmin = 1.0, xmax = 3.0, annotations = "ns",
+              tip_length = 0)+
+  geom_signif(y_position = 5100, xmin = 2.0, xmax = 4.0, annotations = "ns",
+              tip_length = 0)+
+  labs(
+    subtitle = overall_test_label,
+    caption = get_pwc_label(example_of_pwc)
+    )
+  
+
+total_plot <- total_plot + scale_x_discrete(breaks = c("WT_6 wk","Het_6 wk",
+                                                       "WT_12 wk", "Het_12 wk"),
+                                            labels = c("WT \n(n = 47)", 
+                                                       "Het \n(n = 35)", 
+                                                       "WT \n(n = 59)",
+                                                       "Het \n(n = 47)"))
+
+total_plot <- total_plot + stat_summary(fun=mean, geom="point", shape=23, 
+                                        size=5, color="white", fill="white")
+
+total_plot_pv <- total_plot
+
+```
+
+Combining the plots
+```{r, echo=FALSE, fig.show='hide'}
+combo_plot <- ggarrange(total_plot_non, total_plot_pv, nrow = 1, ncol = 2, labels = c("e", "f"))
+combo_plot
+```
+
+Saving the plots
+```{r, echo=FALSE}
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/mecp2_non_and_pv_together.svg", device = "svg",
+       units = "cm", dpi = 300, width = 32, height = 32, plot = combo_plot)
+```
+
+```{r, echo=FALSE}
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/mecp2_non.svg", device = "svg",
+       units = "cm", dpi = 300, width = 32, height = 32, plot = total_plot_non)
+```
+
+```{r, echo=FALSE}
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/mecp2_pv.svg", device = "svg",
+       units = "cm", dpi = 300, width = 32, height = 32, plot = total_plot_pv)
+```
+
+
+Now performing ICC analysis on the combinations we have previously tested to see if any of the variables have high levels of dependence
+```{r, echo=FALSE}
+mecp2_6_12_neg$Cohort <- gsub(x = mecp2_6_12_neg$Cohort,
+                                    pattern = "#", 
+                                    replacement = "")
+
+#For Cohort (225 total samples)
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean, data = mecp2_6_12_neg)
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean, data = mecp2_6_12_neg)
+
+#For Image
+icc_img <- ICCbare(x=factor(Image), y= Mean, data = mecp2_6_12_neg)
+
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell number", "Image")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for PV Negative MECP2 Data",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for Mean 6 week Non-PV MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r, echo=FALSE}
+mecp2_6_12_pos$Cohort <- gsub(x = mecp2_6_12_pos$Cohort,
+                                    pattern = "#", 
+                                    replacement = "")
+
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean, data = mecp2_6_12_pos)
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean, data = mecp2_6_12_pos)
+
+#For Image
+icc_img <- ICCbare(x=factor(Image), y= Mean, data = mecp2_6_12_pos)
+
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell number", "Image")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for PV Positive MECP2 Data",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for Mean 6 week PV MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+Building the lme for non-PV nuclei because of high ICC for `Cohort`
+```{r, echo=FALSE}
+#Now building an LME for non-PV because of high ICC of Cohort.
+#This is the overall model
+lme_mod <- lme(Mean~Time, data=mecp2_6_12_neg , random = ~ 1|Cohort,
+               method = "ML")
+summary(lme_mod)
+```
+
+Doing 6 week WT vs. Het lme model
+```{r, echo=FALSE}
+six_wk_comp_df <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="6 wk")
+
+#Now building an LME for non-PV because of high ICC of Cohort.
+#This is the 6 wk WT vs. Het model
+lme_mod_6wk_comp <- lme(Mean~Condition, data=six_wk_comp_df, 
+                        random = ~ 1|Cohort, method = "ML")
+summary(lme_mod_6wk_comp)
+```
+
+Doing 12 week WT vs. Het lme model
+```{r, echo=FALSE}
+twelve_week_comp <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="12 wk")
+
+#Now building an LME for non-PV because of high ICC of Cohort.
+#This is the 12 wk WT vs. Het model
+lme_mod_12wk_comp <- lme(Mean~Condition, data=twelve_week_comp,
+                         random = ~ 1|Cohort, method = "ML")
+summary(lme_mod_12wk_comp)
+```
+
+Doing 6 week WT vs. 12 week WT lme model
+```{r, echo=FALSE}
+wt_v_wt_comp <- mecp2_6_12_neg %>% group_by(Condition) %>% 
+  filter(Condition=="WT")
+
+#Now building an LME for non-PV because of high ICC of Cohort. This is the 6 wk
+#vs. 12 wk WT vs. WT model
+lme_mod_wt_v_wt_comp <- lme(Mean~Time, data=wt_v_wt_comp, random = ~ 1|Cohort,
+                            method = "ML")
+summary(lme_mod_wt_v_wt_comp)
+```
+
+
+Doing 6 week Het vs. 12 week Het lme model
+```{r, echo=FALSE}
+het_v_het_comp <- mecp2_6_12_neg %>% group_by(Condition) %>% 
+  filter(Condition=="Het")
+
+#Now building an LME for non-PV because of high ICC of Cohort. This is the 12 
+#wk Het vs. Het model
+lme_mod_het_v_het_comp <- lme(Mean~Time, data=het_v_het_comp, random = ~ 1|Cohort, 
+                              method = "ML")
+summary(lme_mod_het_v_het_comp)
+```
+
+Non-PV Nuceli LME Plot
+```{r, echo=FALSE}
+overall_test_label <- create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 1.77, p = "0.2543",
+                                        parameter = "4", n = 225,
+                                        detailed = TRUE, type = "expression")
+
+example_of_pwc <- mecp2_6_12_neg %>% group_by(Time) %>% filter(Time=="6 wk") %>%
+  t_test(formula = Mean~Condition, detailed = TRUE, p.adjust.method = "none")
+
+#Now back to plotting stuff
+mecp2_6_12_neg$Time <- factor(mecp2_6_12_neg$Time, levels = c("6 wk", "12 wk"))
+
+mecp2_6_12_neg$Combo <- paste0(mecp2_6_12_neg$Condition,"_", mecp2_6_12_neg$Time)
+mecp2_6_12_neg$Combo <- factor(mecp2_6_12_neg$Combo, levels = c("WT_6 wk", 
+                                                                "Het_6 wk",
+                                                                "WT_12 wk",
+                                                                "Het_12 wk"))
+
+#WALD F-test
+anova(lme_mod)
+
+#LRT test
+lme_mod_base <- lme(Mean~1, data=mecp2_6_12_neg , random = ~ 1|Cohort,
+                    method = "ML")
+
+anova(lme_mod_base,lme_mod)
+
+#Plot
+total_plot <- ggplot(aes(x=Combo, y=Mean, fill=Condition),
+                     data = mecp2_6_12_neg)+
+  geom_violin() +
+  geom_sina(seed=123)+
+  theme(panel.background = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  face = "bold"),
+        axis.title = element_text(face = "bold"), 
+        axis.text = element_text(face = "bold"), 
+        legend.position = "none")+
+  ylab("Mean MECP2 Intensity (a.u.)")+
+  xlab("")+ggtitle("Non-PV Nuclei")+
+  geom_signif(y_position = c(1750, 1500), xmin = c(1.0,3.0), xmax = c(2.0,4.0),
+              annotations = c("**", "ns"), tip_length = 0)+
+  geom_signif(y_position = 2000, xmin = 1.0, xmax = 3.0, annotations = "ns",
+              tip_length = 0)+
+  geom_signif(y_position = 2500, xmin = 2.0, xmax = 4.0, annotations = "ns",
+              tip_length = 0)+
+  labs(subtitle = overall_test_label,
+       caption = get_pwc_label(example_of_pwc))
+
+  
+
+total_plot <- total_plot + scale_x_discrete(breaks = c("WT_6 wk","Het_6 wk", 
+                                                       "WT_12 wk", "Het_12 wk"),
+                                            labels = c("WT \n(n = 47)",
+                                                       "Het \n(n = 58)",
+                                                       "WT \n(n = 60)",
+                                                       "Het \n(n = 60)"))
+
+total_plot <- total_plot + stat_summary(fun=mean, geom="point", shape=23,
+                                        size=5, color="white", fill="white")
+
+total_plot_pv <- total_plot
+
+total_plot_pv
+```
+
+```{r, echo=FALSE}
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/lme_non_pv_plot.png", device = "png", dpi = 300, units = "cm", height = 32, width = 32, plot = total_plot_pv)
+```
+
+Given the change from very statistically significant to non-significance between the 6 week and 12 week Het groups I wanted to see how many correlated neurons equaled one uncorrelated neuron and how many more neurons we would need to see a difference between these groups. I took the total number of neurons from the MECP2 negative group and divided it by the number of cohorts (because `cohort` is the variable with a high ICC). From this I got the average cluster size `M`. From there I calculated the Design Effect (deff). This tells us how many dependent neurons equal one uncorrelated neuron. From this we can get the effective sample size (neff) which tells us the equivalent number of cohorts if there was no correlation/clustering.   
+```{r, echo=FALSE}
+#Took the total number of neurons from mecp2_6_12_neg (het v. het comparison at 6 and 12 weeks) (number of rows) and divided it by the number of cohorts (6) because that is the variable that has an ICC of ~0.5
+M_het <- 225/6
+
+deff <- 1 + 0.5024248*(M_het)
+
+neff <- 225/deff
+
+analysis_df <- data.frame(M=M_het, Design_effect=deff, Effective_size=neff)
+colnames(analysis_df) <- c("M", "Design effect", "Effective size")
+analysis_df_gt <- gt(analysis_df)
+
+analysis_df_gt
+```
+Our results show that about 11.34 cohorts is what we would need to get a sample size that would be equivalent to a sample size that had no correlation/clustering. This is about 89% more cohorts
+
+## Overall Conclusion
+The `Cohort` variable has moderate ICC (0.50) in the non-PV nuclei samples. The ICC in the PV nuclei samples was low (0.10). Given the moderate level of ICC in the non-PV nuclei a linear mixed effects model was built. This did all of the same comparisons as the standard model but taking into account the effect of the data dependence of `Cohort`. The results largely remain the same with 3/4 comparisons remaining significant and in-line with the results seen in the pre-print. The only change was the Het v. Het comparison went from being very significant to not significant. We also saw a drop in significance in the 6 week WT v. Het comparison but this is not unexpected as taking into account data dependence of variables sometimes lowers the statistical significance of a studied relationship. To get the un-correlated relationship seen between Het populations across time points we would need approximately 5.5 more cohorts

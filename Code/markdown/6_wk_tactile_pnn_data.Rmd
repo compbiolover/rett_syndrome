@@ -1,0 +1,4071 @@
+---
+title: "6 Wk Tactile PNN Data"
+author: "Andrew Willems and Tian Hong"
+date: "7/21/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+## Objective: Analyze 6 week tactile PNN data for collaborators
+
+## Step 1: Load needed packages
+```{r loading packages}
+library(emmeans)
+library(ggplot2)
+library(ggpubr)
+library(ggsignif)
+library(gt)
+library(ICC)
+library(lme4)
+library(lmerTest)
+library(magrittr)
+library(modelsummary)
+library(nlme)
+library(readxl)
+library(rstatix)
+library(tidyverse)
+library(webshot)
+```
+
+## Step 2: Load in data
+```{r loading data}
+#New tac data
+pnn_data <- read.csv("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/processed_data_TacPNN_072222.csv", sep = "\t")
+head(pnn_data)
+
+#Old cohort data
+first_pnn_data <- read.csv("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/processed_data_PNN_3cohorts.csv", sep = "\t")
+first_pnn_data$Subregion <- rep("S1BF", times = nrow(first_pnn_data))
+first_pnn_data_left <- filter(first_pnn_data, Hemisphere=="Left")
+first_pnn_data_right <- filter(first_pnn_data, Hemisphere=="Right")
+
+second_pnn_data <- read.csv("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/processed_data_PNN_031022_corrected.csv", sep = "\t")
+second_pnn_data_left <- filter(second_pnn_data, Hemisphere=="Left")
+second_pnn_data_right <- filter(second_pnn_data, Hemisphere=="Right")
+
+third_pnn_data <- read.csv("~/Documents/Work/PhD Program/Hong Lab/Projects/Krishnan-Analysis/Data/processed_data_PNN_061222.csv", sep = "\t")
+third_pnn_data_left <- filter(third_pnn_data, Hemisphere=="Left")
+third_pnn_data_right <- filter(third_pnn_data, Hemisphere=="Right")
+
+#Combing all old data into a single data frame
+all_pnn_data <- bind_rows(first_pnn_data, second_pnn_data, third_pnn_data)
+all_pnn_data_naive <- filter(all_pnn_data, Condition %in% c("NW", "NH"))
+
+#Filtering to just the specific subregions on the old data, combined hemispheres
+all_pnn_data_naive_s1bf <- filter(all_pnn_data_naive, Subregion=="S1BF") 
+all_pnn_data_naive_s1dz <- filter(all_pnn_data_naive, Subregion=="S1DZ") 
+all_pnn_data_naive_s1fl <- filter(all_pnn_data_naive, Subregion=="S1FL") 
+all_pnn_data_naive_s1hl <- filter(all_pnn_data_naive, Subregion=="S1HL") 
+all_pnn_data_naive_s1ulp <- filter(all_pnn_data_naive, Subregion=="S1ULp") 
+
+#Filtering separate hemispheres and separate subregions in the old data
+all_pnn_data_naive_s1bf_left <- filter(all_pnn_data_naive, Subregion=="S1BF" & Hemisphere=="Left") 
+all_pnn_data_naive_s1bf_right <- filter(all_pnn_data_naive, Subregion=="S1BF" & Hemisphere=="Right") 
+all_pnn_data_naive_s1dz_left <- filter(all_pnn_data_naive, Subregion=="S1DZ" & Hemisphere=="Left") 
+all_pnn_data_naive_s1dz_right <- filter(all_pnn_data_naive, Subregion=="S1DZ" & Hemisphere=="Right") 
+all_pnn_data_naive_s1fl_left <- filter(all_pnn_data_naive, Subregion=="S1FL" & Hemisphere=="Left")
+all_pnn_data_naive_s1fl_right <- filter(all_pnn_data_naive, Subregion=="S1FL" & Hemisphere=="Right")
+all_pnn_data_naive_s1hl_left <- filter(all_pnn_data_naive, Subregion=="S1HL" & Hemisphere=="Left") 
+all_pnn_data_naive_s1hl_right <- filter(all_pnn_data_naive, Subregion=="S1HL" & Hemisphere=="Right") 
+all_pnn_data_naive_s1ulp_left <- filter(all_pnn_data_naive, Subregion=="S1ULp" & Hemisphere=="Left")
+all_pnn_data_naive_s1ulp_right <- filter(all_pnn_data_naive, Subregion=="S1ULp" & Hemisphere=="Right")
+
+
+#New tac data filtering
+pnn_data_left <- filter(pnn_data, Hemisphere=="Left")
+pnn_data_right <- filter(pnn_data, Hemisphere=="Right")
+
+#By just subregion, combined hemisphere
+pnn_data_s1bf <- filter(pnn_data, Subregion=="S1BF")
+pnn_data_s1dz <- filter(pnn_data, Subregion=="S1DZ")
+pnn_data_s1fl <- filter(pnn_data, Subregion=="S1FL")
+pnn_data_s1hl <- filter(pnn_data, Subregion=="S1HL")
+pnn_data_s1ulp <- filter(pnn_data, Subregion=="S1ULp")
+
+#By subregion and separate hemisphere
+#Left hemisphere
+pnn_data_s1bf_left <- filter(pnn_data_left, Subregion=="S1BF")
+pnn_data_s1dz_left <- filter(pnn_data_left, Subregion=="S1DZ")
+pnn_data_s1fl_left <- filter(pnn_data_left, Subregion=="S1FL")
+pnn_data_s1hl_left <- filter(pnn_data_left, Subregion=="S1HL")
+pnn_data_s1ulp_left <- filter(pnn_data_left, Subregion=="S1ULp")
+
+#Right hemisphere
+pnn_data_s1bf_right <- filter(pnn_data_right, Subregion=="S1BF")
+pnn_data_s1dz_right <- filter(pnn_data_right, Subregion=="S1DZ")
+pnn_data_s1fl_right <- filter(pnn_data_right, Subregion=="S1FL")
+pnn_data_s1hl_right <- filter(pnn_data_right, Subregion=="S1HL")
+pnn_data_s1ulp_right <- filter(pnn_data_right, Subregion=="S1ULp")
+
+
+#Combining the old naive data with the new tac data into a single dataframe
+pnn_data_tac_and_naive <- subset(all_pnn_data_naive,
+                                 select = c(Cohort,Condition,Hemisphere,Map.ID,
+                                            Mean.1,Mean.2,Subregion))
+
+pnn_data_tac_and_naive <- bind_rows(pnn_data_tac_and_naive,pnn_data)
+
+pnn_data_tac_and_naive <- pnn_data_tac_and_naive[,c("Cohort","Condition",
+                                                    "Hemisphere","Map.ID",
+                                                    "Mean.1", "Mean.2",
+                                                    "Subregion")]
+
+#Separating the combined dataframe by combined hemisphere and individual subregion
+pnn_data_tac_and_naive_s1bf <- filter(pnn_data_tac_and_naive, Subregion=="S1BF")
+pnn_data_tac_and_naive_s1dz <- filter(pnn_data_tac_and_naive, Subregion=="S1DZ")
+pnn_data_tac_and_naive_s1fl <- filter(pnn_data_tac_and_naive, Subregion=="S1FL")
+pnn_data_tac_and_naive_s1hl <- filter(pnn_data_tac_and_naive, Subregion=="S1HL")
+pnn_data_tac_and_naive_s1ulp <- filter(pnn_data_tac_and_naive, Subregion=="S1ULp")
+
+
+#Separating the combined dataframe by individual hemisphere and individual subregion
+pnn_data_tac_and_naive_s1bf_left <- filter(pnn_data_tac_and_naive, Subregion=="S1BF" & Hemisphere=="Left")
+pnn_data_tac_and_naive_s1bf_right <- filter(pnn_data_tac_and_naive, Subregion=="S1BF" & Hemisphere=="Right")
+pnn_data_tac_and_naive_s1dz_left <- filter(pnn_data_tac_and_naive, Subregion=="S1DZ" & Hemisphere=="Left")
+pnn_data_tac_and_naive_s1dz_right <- filter(pnn_data_tac_and_naive, Subregion=="S1DZ" & Hemisphere=="Right")
+pnn_data_tac_and_naive_s1fl_left <- filter(pnn_data_tac_and_naive, Subregion=="S1FL" & Hemisphere=="Left")
+pnn_data_tac_and_naive_s1fl_right <- filter(pnn_data_tac_and_naive, Subregion=="S1FL" & Hemisphere=="Right")
+pnn_data_tac_and_naive_s1hl_left <- filter(pnn_data_tac_and_naive, Subregion=="S1HL" & Hemisphere=="Left")
+pnn_data_tac_and_naive_s1hl_right <- filter(pnn_data_tac_and_naive, Subregion=="S1HL" & Hemisphere=="Right")
+pnn_data_tac_and_naive_s1ulp_left <- filter(pnn_data_tac_and_naive, Subregion=="S1ULp" & Hemisphere=="Left")
+pnn_data_tac_and_naive_s1ulp_right <- filter(pnn_data_tac_and_naive, Subregion=="S1ULp" & Hemisphere=="Right")
+```
+## Step 3: ICC Analysis 
+
+### a) ICC analysis for combined hemispheres, individual subregions
+```{r icc analysis}
+#S1BF
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1bf)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1bf)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1bf)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+```{r s1bf combined hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1BF Combined Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1bf combined hemi icc table}
+gt_icc_done
+```
+
+
+
+```{r s1dz combined icc analysis}
+#S1DZ
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1dz)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1dz)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1dz)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+```{r s1dz combined hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1DZ Combined Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1dz combined hemi icc table}
+gt_icc_done
+```
+
+```{r s1fl combined icc analysis}
+#S1FL
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1fl)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1fl)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1fl)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+```{r s1fl combined hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1FL Combined Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1fl combined hemi icc table}
+gt_icc_done
+```
+
+```{r s1hl combined icc analysis}
+#S1HL
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1hl)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1hl)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1hl)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+```{r s1hl combined hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1HL Combined Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1hl combined hemi icc table}
+gt_icc_done
+```
+
+```{r s1ulp combined icc analysis}
+#S1ULp
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1ulp)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1ulp)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1ulp)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+```{r s1ulp combined hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1ULp Combined Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1ulp combined hemi icc table}
+gt_icc_done
+```
+
+### b) ICC analysis for individual hemispheres, individual subregions
+
+```{r s1bf left hemi icc analysis}
+#S1BF Left hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1bf_left)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1bf_left)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1bf_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1bf left hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1BF Left Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1bf left hemi icc table}
+gt_icc_done
+```
+
+
+
+```{r s1bf right hemi icc analysis}
+#S1BF Right hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1bf_right)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1bf_right)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1bf_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1bf right hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1BF Right Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1bf right hemi icc table}
+gt_icc_done
+```
+
+
+
+```{r s1dz left hemi icc analysis}
+#S1DZ Left hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1dz_left)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1dz_left)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1dz_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1dz left hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1DZ Left Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1dz left hemi icc table}
+gt_icc_done
+```
+
+
+
+```{r s1dz right hemi icc analysis}
+#S1DZ Right hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1dz_right)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1dz_right)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1dz_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1dz right hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1DZ Right Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1dz right hemi icc table}
+gt_icc_done
+```
+
+
+```{r s1fl left hemi icc analysis}
+#S1FL Left hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1fl_left)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1fl_left)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1fl_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+```{r s1fl left hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1FL Left Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1fl left hemi icc table}
+gt_icc_done
+```
+
+
+
+```{r s1fl right hemi icc analysis}
+#S1FL Right hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1fl_right)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1fl_right)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1fl_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1fl right hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1FL Right Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1fl right hemi icc table}
+gt_icc_done
+```
+
+
+
+```{r s1hl left hemi icc analysis}
+#S1HL Left hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1hl_left)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1hl_left)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1hl_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1hl left hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1HL Left Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1hl left hemi icc table}
+gt_icc_done
+```
+
+
+```{r s1hl right hemi icc analysis}
+#S1HL Right hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1hl_right)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1hl_right)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1hl_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1hl right hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1HL Right Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1hl right hemi icc table}
+gt_icc_done
+```
+
+
+```{r s1ulp left hemi icc analysis}
+#S1ULp Left hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1ulp_left)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1ulp_left)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1ulp_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1ulp left hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1ULp Left Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display sulp left hemi icc table}
+gt_icc_done
+```
+
+
+```{r s1ulp right hemi icc analysis}
+#S1ULp Right hemisphere
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_s1ulp_right)
+
+#For Cell number
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_s1ulp_right)
+
+#For Image
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data_s1ulp_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id, Image=icc_coord)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates")
+```
+
+
+```{r s1ulp right hemi icc results made nice, echo=FALSE}
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1ULp Right Hemi Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display s1ulp right hemi icc table}
+gt_icc_done
+```
+
+### c) ICC analysis for combined hemispheres and combined subregions
+```{r icc analysis for all subregions}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data)
+
+#For Coordinates
+icc_coord <- ICCbare(x=factor(Coordinates), y= Mean.2, data = pnn_data)
+
+#For Subregion
+icc_subreg <- ICCbare(x=factor(Subregion), y= Mean.2, data = pnn_data)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Cell_num=icc_map_id,
+                     Image=icc_coord,
+                     Subregion=icc_subreg)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Coordinates", "Subregion")
+```
+
+
+```{r nice icc results table for all subregions}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week All Subregions Tactile PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Coordinates", "Subregion")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+```{r display all subregions icc}
+gt_icc_done
+```
+
+
+### d) ICC analysis for newest tac data and old naive PNN data combined. Individual subregions, combined hemispheres
+```{r tac and old pnn all subregions combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive)
+
+#For Subregion
+icc_subreg <- ICCbare(x=factor(Subregion), y= Mean.2, data = pnn_data_tac_and_naive)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id,
+                     Subregion=icc_subreg)
+
+colnames(icc_df) <- c("Cohort", "Map.ID", "Subregion")
+```
+
+```{r tac and old pnn data nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week All Subregions Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID", "Subregion")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display all subregions of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1bf combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1bf)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1bf)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1bf nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1BF Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1bf of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1dz combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1dz)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1dz)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1dz nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1DZ Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1dz of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1fl combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1fl)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1fl)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1fl nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1FL Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1fl of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1hl combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1hl)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1hl)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1hl nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1HL Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1hl of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1ulp combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1ulp)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1ulp)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1ulp nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1ULp Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1ulp of tac and old pnn data icc}
+gt_icc_done
+```
+
+### e) Individual hemispheres, individual subregions
+```{r tac and old pnn s1bf left combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1bf_left)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1bf_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1bf left nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1BF Left Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1bf left of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1bf right combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1bf_right)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1bf_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1bf right nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1BF Right Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1bf right of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1dz left combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1dz_left)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1dz_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1dz left nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1DZ Left Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1dz left of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1dz right combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1dz_right)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1dz_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1dz right nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1DZ Right Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1dz right of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1fl left combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1fl_left)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1fl_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1fl left nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1FL Left Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1fl left of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1fl right combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1fl_right)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1fl_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1fl right nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1FL Right Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1fl right of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1hl left combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1hl_left)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1hl_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1hl left nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1HL Left Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1hl left of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1hl right combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1hl_right)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1hl_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1hl right nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1HL Right Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1hl right of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1ulp left combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1ulp_left)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1ulp_left)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1ulp left nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1ULp Left Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1ulp left of tac and old pnn data icc}
+gt_icc_done
+```
+
+```{r tac and old pnn s1ulp right combined icc}
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean.2, data = pnn_data_tac_and_naive_s1ulp_right)
+
+#For Map.ID
+icc_map_id <- ICCbare(x=factor(Map.ID), y= Mean.2, data = pnn_data_tac_and_naive_s1ulp_right)
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort,
+                     Map_ID=icc_map_id)
+
+colnames(icc_df) <- c("Cohort", "Map.ID")
+```
+
+```{r tac and old pnn data s1ulp right nice table}
+gt_icc <- gt(icc_df)
+gt_icc_done <- gt_icc %>% tab_header(
+  title = "ICC for 6 Week S1ULp Right Hemisphere Tactile and Old PNN Data",
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Map.ID")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r display s1ulp right of tac and old pnn data icc}
+gt_icc_done
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Step 4: Building MLEs to look at the statistical significant when accounting for the confounding variables
+
+### a) Combined hemispheres, individual subregions
+```{r s1bf only combined hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates), 
+                data=pnn_data_s1bf, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates),
+                        data=pnn_data_s1bf, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates), data=pnn_data_s1bf, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates), data=pnn_data_s1bf, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1dz only combined hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1dz, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates) + (1|Map.ID),
+                        data=pnn_data_s1dz, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1dz, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1dz, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+```{r s1fl only combined hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1fl, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates) + (1|Map.ID),
+                        data=pnn_data_s1fl, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1fl, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1fl, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1hl only combined hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1hl, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates)+ (1|Map.ID),
+                        data=pnn_data_s1hl, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1hl, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1hl, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+```{r s1ulp only combined hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1ulp, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates) + (1|Map.ID),
+                        data=pnn_data_s1ulp, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1ulp, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1ulp, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+### b) Individual hemispheres, individual subregions 
+```{r s1bf only left hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates), 
+                data=pnn_data_s1bf_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates),
+                        data=pnn_data_s1bf_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates), data=pnn_data_s1bf_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates), data=pnn_data_s1bf_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1bf only right hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort), 
+                data=pnn_data_s1bf_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_s1bf_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_s1bf_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_s1bf_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+```{r s1dz only left hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Map.ID), 
+                data=pnn_data_s1dz_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Map.ID),
+                        data=pnn_data_s1dz_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Map.ID), data=pnn_data_s1dz_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Map.ID), data=pnn_data_s1dz_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+```{r s1dz only right hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Map.ID), 
+                data=pnn_data_s1dz_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Map.ID),
+                        data=pnn_data_s1dz_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Map.ID), data=pnn_data_s1dz_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Map.ID), data=pnn_data_s1dz_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1fl only left hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1fl_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates) + (1|Map.ID),
+                        data=pnn_data_s1fl_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1fl_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1fl_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1fl only right hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Map.ID), 
+                data=pnn_data_s1fl_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Map.ID),
+                        data=pnn_data_s1fl_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Map.ID), data=pnn_data_s1fl_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Map.ID), data=pnn_data_s1fl_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1hl only left hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Map.ID), 
+                data=pnn_data_s1hl_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Map.ID),
+                        data=pnn_data_s1hl_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Map.ID), data=pnn_data_s1hl_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Map.ID), data=pnn_data_s1hl_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1hl only right hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1hl_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates) + (1|Map.ID),
+                        data=pnn_data_s1hl_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1hl_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1hl_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1ulp only left hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Coordinates) + (1|Map.ID), 
+                data=pnn_data_s1ulp_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Coordinates) + (1|Map.ID),
+                        data=pnn_data_s1ulp_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1ulp_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Coordinates)+(1|Map.ID), data=pnn_data_s1ulp_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+```{r s1ulp only right hemi lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Map.ID), 
+                data=pnn_data_s1ulp_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Map.ID),
+                        data=pnn_data_s1ulp_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Map.ID), data=pnn_data_s1ulp_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Map.ID), data=pnn_data_s1ulp_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+```
+
+
+### c) Combined hemispheres, all subregions
+```{r all subregions lme}
+lme_mod=lme(Mean.2~Condition, data= pnn_data, random = ~ 1|Cohort)
+summary(lme_mod)
+```
+
+```{r all subreigions coordinates lme}
+lme_mod=lme(Mean.2~Condition, data= pnn_data, random = ~ 1|Coordinates)
+summary(lme_mod)
+```
+
+```{r all subreigions subregionns lme}
+lme_mod=lme(Mean.2~Condition, data= pnn_data, random = ~ 1|Subregion)
+summary(lme_mod)
+```
+
+### d) Naive data from previous cohorts vs. the TacWT and TacHet data of the newest dataset
+```{r tac vs naive combined lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort) + (1|Subregion), 
+                data=pnn_data_tac_and_naive, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort) + (1|Subregion),
+                        data=pnn_data_tac_and_naive, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort)+(1|Subregion), data=pnn_data_tac_and_naive, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort)+(1|Subregion), data=pnn_data_tac_and_naive, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+Indvidual hemispheres, individual conditions
+```{r tac vs naive s1bf left lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1bf_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1bf_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1bf_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1bf_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1bf right lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1bf_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1bf_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1bf_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1bf_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1dz left lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1dz_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1dz_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1dz_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1dz_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1dz right lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1dz_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1dz_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1dz_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1dz_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1fl left lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1fl_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1fl_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1fl_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1fl_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1fl right lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1fl_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1fl_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1fl_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1fl_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1hl left lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1hl_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1hl_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1hl_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1hl_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1hl right lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1hl_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1hl_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1hl_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1hl_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1ulp left lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1ulp_left, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1ulp_left, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1ulp_left, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1ulp_left, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r tac vs naive s1ulp right lme}
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1ulp_right, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1ulp_right, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1ulp_right, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1ulp_right, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+### e) Just individual subregions, hemispheres together
+```{r s1bf tac vs old data }
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1bf, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1bf, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1bf, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1bf, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r s1dz tac vs old data }
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1dz, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1dz, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1dz, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1dz, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r s1fl tac vs old data }
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1fl, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1fl, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1fl, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1fl, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r s1hl tac vs old data }
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1hl, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1hl, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1hl, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1hl, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+```{r s1ulp tac vs old data }
+lme_mod <- lmer(Mean.2 ~ Condition+ (1|Cohort),
+                data=pnn_data_tac_and_naive_s1ulp, REML=FALSE)
+
+
+obj.lmer=lmerTest::lmer(Mean.2 ~ Condition+(1|Cohort),
+                        data=pnn_data_tac_and_naive_s1ulp, REML = TRUE)
+
+
+anova(obj.lmer, ddf="Kenward-Roger")
+
+obj.lmer.ml=lme4::lmer(Mean.2 ~ Condition+(1|Cohort), data=pnn_data_tac_and_naive_s1ulp, REML=FALSE)
+obj.lmer0.ml=lme4::lmer(Mean.2 ~ 1+(1|Cohort), data=pnn_data_tac_and_naive_s1ulp, REML=FALSE)
+anova(obj.lmer0.ml, obj.lmer.ml)
+
+#Individual treatment p-values
+summary(obj.lmer, ddf="Kenward-Roger")
+
+#Pairwise comparison (all vs all)
+contrast(emmeans(obj.lmer, specs="Condition"), "pairwise")
+
+#Pairwise comparison (treatment vs control)
+contrast(emmeans(obj.lmer, specs="Condition"), "trt.vs.ctrl", ref="NW")
+```
+
+
+
+## Step 5: Plotting the LME Results between WT and Het (combined hemispheres, individual subregions) 
+### a) S1BF subregion
+```{r making the s1bf combined hemi plot}
+pnn_data_s1bf$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1bf$Condition)
+pnn_data_s1bf$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1bf$Condition)
+pnn_data_s1bf$Condition <- factor(pnn_data_s1bf$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 4.1118, p = "0.04379", n = 240,
+                                        detailed = TRUE, type = "expression")
+
+fig_1 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1bf)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 92, tip_length = 0, annotations = "*", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1BF Data")+
+  labs(subtitle = overall_label)
+
+
+fig_1 <- fig_1 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 136)",
+                                             "Het \n(n = 104)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1bf, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1bf, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1bf, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1bf, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1bf, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1bf, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_1 <- fig_1 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_1 <- fig_1 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_1 <- fig_1 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_1 <- fig_1 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_1 <- fig_1 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_1 <- fig_1 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_1 <- fig_1 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1bf combined hemi plot}
+fig_1
+```
+
+### b) S1DZ subregion
+```{r making the s1dz combined hemi plot}
+pnn_data_s1dz$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1dz$Condition)
+pnn_data_s1dz$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1dz$Condition)
+pnn_data_s1dz$Condition <- factor(pnn_data_s1dz$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.6881, p = "0.4076", n = 273,
+                                        detailed = TRUE, type = "expression")
+
+fig_2 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1dz)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 100, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1DZ Data")+
+  labs(subtitle = overall_label)
+
+
+fig_2 <- fig_2 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 158)",
+                                             "Het \n(n = 115)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1dz, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1dz, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1dz, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1dz, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1dz, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1dz, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_2 <- fig_2 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_2 <- fig_2 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_2 <- fig_2 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_2 <- fig_2 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_2 <- fig_2 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_2 <- fig_2 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_2 <- fig_2 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1dz combined hemi plot}
+fig_2
+```
+
+### c) S1FL subregion
+```{r making the s1fl combined hemi plot}
+pnn_data_s1fl$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1fl$Condition)
+pnn_data_s1fl$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1fl$Condition)
+pnn_data_s1fl$Condition <- factor(pnn_data_s1fl$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.1122, p = "0.738", n = 222,
+                                        detailed = TRUE, type = "expression")
+
+fig_3 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1fl)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 90, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1FL Data")+
+  labs(subtitle = overall_label)
+
+
+fig_3 <- fig_3 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 127)",
+                                             "Het \n(n = 95)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1fl, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1fl, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1fl, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1fl, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1fl, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1fl, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_3 <- fig_3 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_3 <- fig_3 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_3 <- fig_3 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_3 <- fig_3 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_3 <- fig_3 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_3 <- fig_3 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_3 <- fig_3 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1fl combined plot}
+fig_3
+```
+
+### d) S1HL Subregion
+```{r making the s1hl combined hemi plot}
+pnn_data_s1hl$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1hl$Condition)
+pnn_data_s1hl$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1hl$Condition)
+pnn_data_s1hl$Condition <- factor(pnn_data_s1hl$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.0097, p = "0.9215", n = 176,
+                                        detailed = TRUE, type = "expression")
+
+fig_4 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1hl)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 85, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1HL Data")+
+  labs(subtitle = overall_label)
+
+
+fig_4 <- fig_4 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 102)",
+                                             "Het \n(n = 74)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1hl, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1hl, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1hl, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1hl, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1hl, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1hl, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_4 <- fig_4 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_4 <- fig_4 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_4 <- fig_4 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_4 <- fig_4 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_4 <- fig_4 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_4 <- fig_4 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_4 <- fig_4 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1hl combined plot}
+fig_4
+```
+
+### e) S1ULp Subregion
+```{r making the s1ulp combined hemi plot}
+pnn_data_s1hl$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1hl$Condition)
+pnn_data_s1hl$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1hl$Condition)
+pnn_data_s1hl$Condition <- factor(pnn_data_s1hl$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 10.229, p = "0.001553", n = 291,
+                                        detailed = TRUE, type = "expression")
+
+fig_5 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1hl)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 85, tip_length = 0, annotations = "**", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1ULp Data")+
+  labs(subtitle = overall_label)
+
+
+fig_5 <- fig_5 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 165)",
+                                             "Het \n(n = 126)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1hl, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1hl, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1hl, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1hl, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1hl, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1hl, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_5 <- fig_5 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_5 <- fig_5 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_5 <- fig_5 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_5 <- fig_5 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_5 <- fig_5 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_5 <- fig_5 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_5 <- fig_5 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1ulp combined plot}
+fig_5
+```
+
+### f) Saving the combined hemisphere, individual subregion plots to `.png` and `.svg` file formats
+```{r saving fig1 to .svg and .png}
+ggsave(filename = "fig1.png",
+       plot     = print(fig_1, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig1.svg",
+       plot     = print(fig_1, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig2 to .svg and .png}
+ggsave(filename = "fig2.png",
+       plot     = print(fig_2, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig2.svg",
+       plot     = print(fig_2, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig3 to .svg and .png}
+ggsave(filename = "fig3.png",
+       plot     = print(fig_3, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig3.svg",
+       plot     = print(fig_3, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig4 to .svg and .png}
+ggsave(filename = "fig4.png",
+       plot     = print(fig_4, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig4.svg",
+       plot     = print(fig_4, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig5 to .svg and .png}
+ggsave(filename = "fig5.png",
+       plot     = print(fig_5, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig5.svg",
+       plot     = print(fig_5, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+## Step 6: Plotting the LME Results between WT and Het (individual hemispheres, individual subregions) 
+### a) S1BF subregion, left hemisphere
+```{r making the s1bf left hemi plot}
+pnn_data_s1bf_left$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1bf_left$Condition)
+pnn_data_s1bf_left$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1bf_left$Condition)
+pnn_data_s1bf_left$Condition <- factor(pnn_data_s1bf_left$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.8533, p = "0.3577", n = 127,
+                                        detailed = TRUE, type = "expression")
+
+fig_6 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1bf_left)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 92, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1BF\n Left Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_6 <- fig_6 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 74)",
+                                             "Het \n(n = 53)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1bf_left, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1bf_left, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1bf_left, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1bf_left, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1bf_left, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1bf_left, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_6 <- fig_6 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_6 <- fig_6 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_6 <- fig_6 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_6 <- fig_6 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_6 <- fig_6 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_6 <- fig_6 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_6 <- fig_6 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1bf left hemi plot}
+fig_6
+```
+
+### b) S1BF subregion, right hemisphere
+```{r making the s1bf right hemi plot}
+pnn_data_s1bf_right$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1bf_right$Condition)
+pnn_data_s1bf_right$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1bf_right$Condition)
+pnn_data_s1bf_right$Condition <- factor(pnn_data_s1bf_right$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 2.7416, p = "0.1006", n = 113,
+                                        detailed = TRUE, type = "expression")
+
+fig_7 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1bf_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 92, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1BF\n Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_7 <- fig_7 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 62)",
+                                             "Het \n(n = 51)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1bf_right, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1bf_right, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1bf_right, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1bf_right, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1bf_right, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1bf_right, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_7 <- fig_7 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_7 <- fig_7 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_7 <- fig_7 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_7 <- fig_7 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_7 <- fig_7 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_7 <- fig_7 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_7 <- fig_7 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1bf right hemi plot}
+fig_7
+```
+
+### c) S1DZ subregion, left hemisphere
+```{r making the s1dz left hemi plot}
+pnn_data_s1dz_left$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1dz_left$Condition)
+pnn_data_s1dz_left$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1dz_left$Condition)
+pnn_data_s1dz_left$Condition <- factor(pnn_data_s1dz_left$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.1044, p = "0.7471", n = 145,
+                                        detailed = TRUE, type = "expression")
+
+fig_8 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1dz_left)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 100, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1DZ\n Left Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_8 <- fig_8 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 85)",
+                                             "Het \n(n = 60)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1dz_left, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1dz_left, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1dz_left, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1dz_left, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1dz_left, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1dz_left, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_8 <- fig_8 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_8 <- fig_8 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_8 <- fig_8 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_8 <- fig_8 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_8 <- fig_8 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_8 <- fig_8 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_8 <- fig_8 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1dz left hemi plot}
+fig_8
+```
+
+### d) S1DZ subregion, right hemisphere
+```{r making the s1dz right hemi plot}
+pnn_data_s1dz_right$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1dz_right$Condition)
+pnn_data_s1dz_right$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1dz_right$Condition)
+pnn_data_s1dz_right$Condition <- factor(pnn_data_s1dz_right$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 1.0045, p = "0.3184", n = 128,
+                                        detailed = TRUE, type = "expression")
+
+fig_9 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1dz_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 85, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1DZ\n Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_9 <- fig_9 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 73)",
+                                             "Het \n(n = 55)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1dz_right, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1dz_right, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1dz_right, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1dz_right, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1dz_right, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1dz_right, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_9 <- fig_9 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_9 <- fig_9 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_9 <- fig_9 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_9 <- fig_9 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_9 <- fig_9 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_9 <- fig_9 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_9 <- fig_9 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1dz right hemi plot}
+fig_9
+```
+
+### e) S1FL subregion, left hemisphere
+```{r making the s1fl left hemi plot}
+pnn_data_s1fl_left$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1fl_left$Condition)
+pnn_data_s1fl_left$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1fl_left$Condition)
+pnn_data_s1fl_left$Condition <- factor(pnn_data_s1fl_left$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.9153, p = "0.3416", n = 114,
+                                        detailed = TRUE, type = "expression")
+
+fig_10 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1fl_left)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 88, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1FL\n Left Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_10 <- fig_10 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 66)",
+                                             "Het \n(n = 48)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1fl_left, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1fl_left, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1fl_left, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1fl_left, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1fl_left, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1fl_left, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_10 <- fig_10 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_10 <- fig_10 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_10 <- fig_10 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_10 <- fig_10 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_10 <- fig_10 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_10 <- fig_10 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_10 <- fig_10 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1fl left hemi plot}
+fig_10
+```
+
+### f) S1FL subregion, right hemisphere
+```{r making the s1fl right hemi plot}
+pnn_data_s1fl_right$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1fl_right$Condition)
+pnn_data_s1fl_right$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1fl_right$Condition)
+pnn_data_s1fl_right$Condition <- factor(pnn_data_s1fl_right$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 1.5965, p = "0.2097", n = 108,
+                                        detailed = TRUE, type = "expression")
+
+fig_11 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1fl_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 88, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1FL\n Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_11 <- fig_11 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 61)",
+                                             "Het \n(n = 47)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1fl_right, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1fl_right, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1fl_right, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1fl_right, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1fl_right, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1fl_right, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_11 <- fig_11 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_11 <- fig_11 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_11 <- fig_11 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_11 <- fig_11 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_11 <- fig_11 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_11 <- fig_11 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_11 <- fig_11 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1fl right hemi plot}
+fig_11
+```
+
+### g) S1HL subregion, left hemisphere
+```{r making the s1hl left hemi plot}
+pnn_data_s1hl_left$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1hl_left$Condition)
+pnn_data_s1hl_left$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1hl_left$Condition)
+pnn_data_s1hl_left$Condition <- factor(pnn_data_s1hl_left$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.1079, p = "0.7435", n = 92,
+                                        detailed = TRUE, type = "expression")
+
+fig_12 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1hl_left)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 88, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1HL\n Left Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_12 <- fig_12 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 54)",
+                                             "Het \n(n = 38)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1hl_left, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1hl_left, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1hl_left, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1hl_left, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1hl_left, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1hl_left, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_12 <- fig_12 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_12 <- fig_12 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_12 <- fig_12 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_12 <- fig_12 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_12 <- fig_12 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_12 <- fig_12 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_12 <- fig_12 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1hl left hemi plot}
+fig_12
+```
+
+### h) S1HL subregion, right hemisphere
+```{r making the s1hl right hemi plot}
+pnn_data_s1hl_right$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1hl_right$Condition)
+pnn_data_s1hl_right$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1hl_right$Condition)
+pnn_data_s1hl_right$Condition <- factor(pnn_data_s1hl_right$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 0.1383, p = "0.7114", n = 84,
+                                        detailed = TRUE, type = "expression")
+
+fig_13 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1hl_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 80, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1HL\n Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_13 <- fig_13 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 48)",
+                                             "Het \n(n = 36)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1hl_right, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1hl_right, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1hl_right, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1hl_right, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1hl_right, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1hl_right, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_13 <- fig_13 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_13 <- fig_13 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_13 <- fig_13 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_13 <- fig_13 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_13 <- fig_13 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_13 <- fig_13 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_13 <- fig_13 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1hl right hemi plot}
+fig_13
+```
+
+### i) S1ULp subregion, left hemisphere
+```{r making the s1ulp left hemi plot}
+pnn_data_s1ulp_left$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1ulp_left$Condition)
+pnn_data_s1ulp_left$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1ulp_left$Condition)
+pnn_data_s1ulp_left$Condition <- factor(pnn_data_s1ulp_left$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 2.0816, p = "0.1518", n = 152,
+                                        detailed = TRUE, type = "expression")
+
+fig_14 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1ulp_left)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 95, tip_length = 0, annotations = "ns", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1ULp\n Left Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_14 <- fig_14 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 88)",
+                                             "Het \n(n = 64)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1ulp_left, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1ulp_left, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1ulp_left, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1ulp_left, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1ulp_left, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1ulp_left, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_14 <- fig_14 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_14 <- fig_14 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_14 <- fig_14 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_14 <- fig_14 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_14 <- fig_14 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_14 <- fig_14 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_14 <- fig_14 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1ulp left hemi plot}
+fig_14
+```
+
+### j) S1ULp subregion, right hemisphere
+```{r making the s1ulp right hemi plot}
+pnn_data_s1ulp_right$Condition <- gsub(pattern = "TacHet", replacement = "Het", x = pnn_data_s1ulp_right$Condition)
+pnn_data_s1ulp_right$Condition <- gsub(pattern = "TacWT", replacement = "WT", x = pnn_data_s1ulp_right$Condition)
+pnn_data_s1ulp_right$Condition <- factor(pnn_data_s1ulp_right$Condition, levels = c("WT", "Het"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "F-test",
+                                        statistic.text = quote(italic(F)),
+                                        statistic = 7.0524, p = "0.009025", n = 139,
+                                        detailed = TRUE, type = "expression")
+
+fig_15 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_s1ulp_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 105, tip_length = 0, annotations = "**", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile S1ULp\n Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_15 <- fig_15 + scale_x_discrete(breaks = c("WT","Het"),
+                                  labels = c("WT \n(n = 77)",
+                                             "Het \n(n = 62)"))
+
+
+pnn_coh1_wt <- filter(pnn_data_s1ulp_right, Cohort=="021621" & Condition=="WT")
+pnn_coh1_het <- filter(pnn_data_s1ulp_right, Cohort=="021621" & Condition=="Het")
+
+pnn_coh2_wt <- filter(pnn_data_s1ulp_right, Cohort=="061321A" & Condition=="WT")
+pnn_coh2_het <- filter(pnn_data_s1ulp_right, Cohort=="061321A" & Condition=="Het")
+
+pnn_coh3_wt <- filter(pnn_data_s1ulp_right, Cohort=="061321B" & Condition=="WT")
+pnn_coh3_het <- filter(pnn_data_s1ulp_right, Cohort=="061321B" & Condition=="Het")
+
+
+
+fig_15 <- fig_15 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_15 <- fig_15 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_15 <- fig_15 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_15 <- fig_15 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_15 <- fig_15 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_15 <- fig_15 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+
+fig_15 <- fig_15 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green"))
+
+```
+
+```{r displaying the s1ulp right hemi plot}
+fig_15
+```
+
+### k) Combined plot with all combinations shown
+```{r making the combined subregion different hemi plot}
+combo_plot <- ggarrange(plotlist = list(fig_6,fig_7,fig_8,fig_9,fig_10,
+                          fig_11,fig_12,fig_13,fig_14,fig_15), ncol = 2,
+          nrow = 5, labels = "AUTO", common.legend = TRUE, legend = "top")
+```
+
+### l) Saving the plots to `.png` and `.svg` formats
+```{r saving fig6 to .svg and .png}
+ggsave(filename = "fig6.png",
+       plot     = print(fig_6, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig6.svg",
+       plot     = print(fig_6, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig7 to .svg and .png}
+ggsave(filename = "fig7.png",
+       plot     = print(fig_7, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig7.svg",
+       plot     = print(fig_7, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig8 to .svg and .png}
+ggsave(filename = "fig8.png",
+       plot     = print(fig_8, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig8.svg",
+       plot     = print(fig_8, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig9 to .svg and .png}
+ggsave(filename = "fig9.png",
+       plot     = print(fig_9, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig9.svg",
+       plot     = print(fig_9, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig10 to .svg and .png}
+ggsave(filename = "fig10.png",
+       plot     = print(fig_10, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig10.svg",
+       plot     = print(fig_10, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig11 to .svg and .png}
+ggsave(filename = "fig11.png",
+       plot     = print(fig_11, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig11.svg",
+       plot     = print(fig_11, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig12 to .svg and .png}
+ggsave(filename = "fig12.png",
+       plot     = print(fig_12, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig12.svg",
+       plot     = print(fig_12, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig13 to .svg and .png}
+ggsave(filename = "fig13.png",
+       plot     = print(fig_13, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig13.svg",
+       plot     = print(fig_13, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig14 to .svg and .png}
+ggsave(filename = "fig14.png",
+       plot     = print(fig_14, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig14.svg",
+       plot     = print(fig_14, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig15 to .svg and .png}
+ggsave(filename = "fig15.png",
+       plot     = print(fig_15, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+
+ggsave(filename = "fig15.svg",
+       plot     = print(fig_15, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 15, height = 15,
+       units    = "cm")
+```
+
+```{r saving fig16 to .svg and .png}
+ggsave(filename = "fig16.png",
+       plot     = print(combo_plot, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 70, height = 70,
+       units    = "cm")
+
+ggsave(filename = "fig16.svg",
+       plot     = print(combo_plot, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 70, height = 70,
+       units    = "cm")
+```
+
+## Step 7: Plotting the statistically significant different pairs of Tac data vs. old PNN Data
+### a) Combined hemisphere, individual subregion
+#### i) S1FL
+```{r making the s1fl tac vs other pnn data combined hemi plot}
+pnn_data_tac_and_naive_s1fl$Condition <- gsub(pattern = "NH", replacement = "Het",
+                                              x = pnn_data_tac_and_naive_s1fl$Condition)
+
+pnn_data_tac_and_naive_s1fl$Condition <- gsub(pattern = "NW", replacement = "WT",
+                                              x = pnn_data_tac_and_naive_s1fl$Condition)
+
+pnn_data_tac_and_naive_s1fl$Condition <- factor(pnn_data_tac_and_naive_s1fl$Condition,
+                                                levels = c("WT", "Het", "TacWT", "TacHet"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "T-test",
+                                        statistic.text = quote(italic(T)),
+                                        statistic = 3.190, p = "0.0080", n = 791,
+                                        detailed = TRUE, type = "expression")
+
+fig_17 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_tac_and_naive_s1fl)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 90, tip_length = 0, annotations = "**", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile vs. Previous PNN S1FL Data")+
+  labs(subtitle = overall_label)
+
+
+fig_17 <- fig_17 + scale_x_discrete(breaks = c("WT","Het", "TacWT", "TacHet"),
+                                  labels = c("WT \n(n = 280)",
+                                             "Het \n(n = 289)",
+                                             "TacWT \n(n = 127)",
+                                             "TacHet \n(n = 95)"))
+
+
+
+
+pnn_coh1_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="021621" & Condition=="TacWT")
+pnn_coh1_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="021621" & Condition=="TacHet")
+
+pnn_coh2_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="061321A" & Condition=="TacWT")
+pnn_coh2_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="061321A" & Condition=="TacHet")
+
+pnn_coh3_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="061321B" & Condition=="TacWT")
+pnn_coh3_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="061321B" & Condition=="TacHet")
+
+pnn_coh4_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="102319" & Condition=="WT")
+pnn_coh4_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="102319" & Condition=="Het")
+
+pnn_coh5_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="103119" & Condition=="WT")
+pnn_coh5_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="103119" & Condition=="Het")
+
+pnn_coh6_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="121119A" & Condition=="WT")
+pnn_coh6_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="121119A" & Condition=="Het")
+
+pnn_coh7_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="121119B" & Condition=="WT")
+pnn_coh7_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="121119B" & Condition=="Het")
+
+pnn_coh8_wt <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="21620" & Condition=="WT")
+pnn_coh8_het <- filter(pnn_data_tac_and_naive_s1fl, Cohort=="21620" & Condition=="Het")
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_het)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_wt)
+
+fig_17 <- fig_17 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_het)
+
+
+fig_17 <- fig_17 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green",
+                                              "102319"="pink", 
+                                              "103119"="red", 
+                                              "121119A"="sky blue",
+                                              "121119B"="magenta",
+                                              "21620"="orange"))
+
+```
+
+```{r displaying s1fl tac vs other pnn data combined hemi plot}
+fig_17
+```
+
+#### ii) S1ULp
+```{r making the s1ulp tac vs other pnn data combined hemi plot}
+pnn_data_tac_and_naive_s1ulp$Condition <- gsub(pattern = "NH", replacement = "Het",
+                                              x = pnn_data_tac_and_naive_s1ulp$Condition)
+
+pnn_data_tac_and_naive_s1ulp$Condition <- gsub(pattern = "NW", replacement = "WT",
+                                              x = pnn_data_tac_and_naive_s1ulp$Condition)
+
+pnn_data_tac_and_naive_s1ulp$Condition <- factor(pnn_data_tac_and_naive_s1ulp$Condition,
+                                                levels = c("WT", "Het", "TacWT", "TacHet"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "T-test",
+                                        statistic.text = quote(italic(T)),
+                                        statistic = 5.810, p = "< 0.0001", n = 1035,
+                                        detailed = TRUE, type = "expression")
+
+fig_18 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_tac_and_naive_s1ulp)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 110, tip_length = 0, annotations = "***", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile vs. Previous PNN S1ULp Data")+
+  labs(subtitle = overall_label)
+
+
+fig_18 <- fig_18 + scale_x_discrete(breaks = c("WT","Het", "TacWT", "TacHet"),
+                                  labels = c("WT \n(n = 366)",
+                                             "Het \n(n = 378)",
+                                             "TacWT \n(n = 165)",
+                                             "TacHet \n(n = 126)"))
+
+
+
+
+pnn_coh1_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="021621" & Condition=="TacWT")
+pnn_coh1_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="021621" & Condition=="TacHet")
+
+pnn_coh2_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="061321A" & Condition=="TacWT")
+pnn_coh2_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="061321A" & Condition=="TacHet")
+
+pnn_coh3_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="061321B" & Condition=="TacWT")
+pnn_coh3_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="061321B" & Condition=="TacHet")
+
+pnn_coh4_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="102319" & Condition=="WT")
+pnn_coh4_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="102319" & Condition=="Het")
+
+pnn_coh5_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="103119" & Condition=="WT")
+pnn_coh5_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="103119" & Condition=="Het")
+
+pnn_coh6_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="121119A" & Condition=="WT")
+pnn_coh6_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="121119A" & Condition=="Het")
+
+pnn_coh7_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="121119B" & Condition=="WT")
+pnn_coh7_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="121119B" & Condition=="Het")
+
+pnn_coh8_wt <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="21620" & Condition=="WT")
+pnn_coh8_het <- filter(pnn_data_tac_and_naive_s1ulp, Cohort=="21620" & Condition=="Het")
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_het)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_wt)
+
+fig_18 <- fig_18 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_het)
+
+
+fig_18 <- fig_18 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green",
+                                              "102319"="pink", 
+                                              "103119"="red", 
+                                              "121119A"="sky blue",
+                                              "121119B"="magenta",
+                                              "21620"="orange"))
+
+```
+
+```{r displaying s1ulp tac vs other pnn data combined hemi plot}
+fig_18
+```
+
+## b) Separate hemispheres, individual subregions
+
+#### i) S1DZ right hemisphere
+```{r making the s1dz tac vs other pnn data right hemi plot}
+pnn_data_tac_and_naive_s1dz_right$Condition <- gsub(pattern = "NH", replacement = "Het",
+                                              x = pnn_data_tac_and_naive_s1dz_right$Condition)
+
+pnn_data_tac_and_naive_s1dz_right$Condition <- gsub(pattern = "NW", replacement = "WT",
+                                              x = pnn_data_tac_and_naive_s1dz_right$Condition)
+
+pnn_data_tac_and_naive_s1dz_right$Condition <- factor(pnn_data_tac_and_naive_s1dz_right$Condition,
+                                                levels = c("WT", "Het", "TacWT", "TacHet"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "T-test",
+                                        statistic.text = quote(italic(T)),
+                                        statistic = 2.926, p = "0.0189", n = 472,
+                                        detailed = TRUE, type = "expression")
+
+fig_19 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_tac_and_naive_s1dz_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 100, tip_length = 0, annotations = "*", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile vs. Previous PNN S1DZ Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_19 <- fig_19 + scale_x_discrete(breaks = c("WT","Het", "TacWT", "TacHet"),
+                                  labels = c("WT \n(n = 175)",
+                                             "Het \n(n = 169)",
+                                             "TacWT \n(n = 73)",
+                                             "TacHet \n(n = 55)"))
+
+
+
+
+pnn_coh1_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="021621" & Condition=="TacWT")
+pnn_coh1_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="021621" & Condition=="TacHet")
+
+pnn_coh2_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="061321A" & Condition=="TacWT")
+pnn_coh2_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="061321A" & Condition=="TacHet")
+
+pnn_coh3_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="061321B" & Condition=="TacWT")
+pnn_coh3_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="061321B" & Condition=="TacHet")
+
+pnn_coh4_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="102319" & Condition=="WT")
+pnn_coh4_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="102319" & Condition=="Het")
+
+pnn_coh5_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="103119" & Condition=="WT")
+pnn_coh5_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="103119" & Condition=="Het")
+
+pnn_coh6_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="121119A" & Condition=="WT")
+pnn_coh6_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="121119A" & Condition=="Het")
+
+pnn_coh7_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="121119B" & Condition=="WT")
+pnn_coh7_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="121119B" & Condition=="Het")
+
+pnn_coh8_wt <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="21620" & Condition=="WT")
+pnn_coh8_het <- filter(pnn_data_tac_and_naive_s1dz_right, Cohort=="21620" & Condition=="Het")
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_het)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_wt)
+
+fig_19 <- fig_19 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_het)
+
+
+fig_19 <- fig_19 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green",
+                                              "102319"="pink", 
+                                              "103119"="red", 
+                                              "121119A"="sky blue",
+                                              "121119B"="magenta",
+                                              "21620"="orange"))
+
+```
+
+```{r displaying s1dz tac vs other pnn data right hemi plot}
+fig_19
+```
+
+#### ii) S1FL right hemisphere
+```{r making the s1fl tac vs other pnn data right hemi plot}
+pnn_data_tac_and_naive_s1fl_right$Condition <- gsub(pattern = "NH", replacement = "Het",
+                                              x = pnn_data_tac_and_naive_s1fl_right$Condition)
+
+pnn_data_tac_and_naive_s1fl_right$Condition <- gsub(pattern = "NW", replacement = "WT",
+                                              x = pnn_data_tac_and_naive_s1fl_right$Condition)
+
+pnn_data_tac_and_naive_s1fl_right$Condition <- factor(pnn_data_tac_and_naive_s1fl_right$Condition,
+                                                levels = c("WT", "Het", "TacWT", "TacHet"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "T-test",
+                                        statistic.text = quote(italic(T)),
+                                        statistic = 3.140, p = "0.0098", n = 385,
+                                        detailed = TRUE, type = "expression")
+
+fig_20 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_tac_and_naive_s1fl_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 95, tip_length = 0, annotations = "*", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile vs. Previous PNN S1FL Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_20 <- fig_20 + scale_x_discrete(breaks = c("WT","Het", "TacWT", "TacHet"),
+                                  labels = c("WT \n(n = 142)",
+                                             "Het \n(n = 135)",
+                                             "TacWT \n(n = 61)",
+                                             "TacHet \n(n = 47)"))
+
+
+
+
+pnn_coh1_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="021621" & Condition=="TacWT")
+pnn_coh1_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="021621" & Condition=="TacHet")
+
+pnn_coh2_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="061321A" & Condition=="TacWT")
+pnn_coh2_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="061321A" & Condition=="TacHet")
+
+pnn_coh3_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="061321B" & Condition=="TacWT")
+pnn_coh3_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="061321B" & Condition=="TacHet")
+
+pnn_coh4_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="102319" & Condition=="WT")
+pnn_coh4_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="102319" & Condition=="Het")
+
+pnn_coh5_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="103119" & Condition=="WT")
+pnn_coh5_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="103119" & Condition=="Het")
+
+pnn_coh6_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="121119A" & Condition=="WT")
+pnn_coh6_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="121119A" & Condition=="Het")
+
+pnn_coh7_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="121119B" & Condition=="WT")
+pnn_coh7_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="121119B" & Condition=="Het")
+
+pnn_coh8_wt <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="21620" & Condition=="WT")
+pnn_coh8_het <- filter(pnn_data_tac_and_naive_s1fl_right, Cohort=="21620" & Condition=="Het")
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_het)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_wt)
+
+fig_20 <- fig_20 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_het)
+
+
+fig_20 <- fig_20 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green",
+                                              "102319"="pink", 
+                                              "103119"="red", 
+                                              "121119A"="sky blue",
+                                              "121119B"="magenta",
+                                              "21620"="orange"))
+
+```
+
+```{r displaying s1fl tac vs other pnn data right hemi plot}
+fig_20
+```
+
+#### iii) S1ULp left hemisphere
+```{r making the s1ulp tac vs other pnn data left hemi plot}
+pnn_data_tac_and_naive_s1ulp_left$Condition <- gsub(pattern = "NH", replacement = "Het",
+                                              x = pnn_data_tac_and_naive_s1ulp_left$Condition)
+
+pnn_data_tac_and_naive_s1ulp_left$Condition <- gsub(pattern = "NW", replacement = "WT",
+                                              x = pnn_data_tac_and_naive_s1ulp_left$Condition)
+
+pnn_data_tac_and_naive_s1ulp_left$Condition <- factor(pnn_data_tac_and_naive_s1ulp_left$Condition,
+                                                levels = c("WT", "Het", "TacWT", "TacHet"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "T-test",
+                                        statistic.text = quote(italic(T)),
+                                        statistic = 4.907, p = "< 0.0001", n = 529,
+                                        detailed = TRUE, type = "expression")
+
+fig_21 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_tac_and_naive_s1ulp_left)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 105, tip_length = 0, annotations = "***", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile vs. Previous PNN S1ULp Left Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_21 <- fig_21 + scale_x_discrete(breaks = c("WT","Het", "TacWT", "TacHet"),
+                                  labels = c("WT \n(n = 179)",
+                                             "Het \n(n = 198)",
+                                             "TacWT \n(n = 88)",
+                                             "TacHet \n(n = 64)"))
+
+
+
+
+pnn_coh1_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="021621" & Condition=="TacWT")
+pnn_coh1_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="021621" & Condition=="TacHet")
+
+pnn_coh2_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="061321A" & Condition=="TacWT")
+pnn_coh2_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="061321A" & Condition=="TacHet")
+
+pnn_coh3_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="061321B" & Condition=="TacWT")
+pnn_coh3_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="061321B" & Condition=="TacHet")
+
+pnn_coh4_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="102319" & Condition=="WT")
+pnn_coh4_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="102319" & Condition=="Het")
+
+pnn_coh5_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="103119" & Condition=="WT")
+pnn_coh5_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="103119" & Condition=="Het")
+
+pnn_coh6_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="121119A" & Condition=="WT")
+pnn_coh6_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="121119A" & Condition=="Het")
+
+pnn_coh7_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="121119B" & Condition=="WT")
+pnn_coh7_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="121119B" & Condition=="Het")
+
+pnn_coh8_wt <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="21620" & Condition=="WT")
+pnn_coh8_het <- filter(pnn_data_tac_and_naive_s1ulp_left, Cohort=="21620" & Condition=="Het")
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_het)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_wt)
+
+fig_21 <- fig_21 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_het)
+
+
+fig_21 <- fig_21 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green",
+                                              "102319"="pink", 
+                                              "103119"="red", 
+                                              "121119A"="sky blue",
+                                              "121119B"="magenta",
+                                              "21620"="orange"))
+
+```
+
+```{r displaying s1ulp tac vs other pnn data left hemi plot}
+fig_21
+```
+
+#### iv) S1ULp right hemisphere
+```{r making the s1ulp tac vs other pnn data right hemi plot}
+pnn_data_tac_and_naive_s1ulp_right$Condition <- gsub(pattern = "NH", replacement = "Het",
+                                              x = pnn_data_tac_and_naive_s1ulp_right$Condition)
+
+pnn_data_tac_and_naive_s1ulp_right$Condition <- gsub(pattern = "NW", replacement = "WT",
+                                              x = pnn_data_tac_and_naive_s1ulp_right$Condition)
+
+pnn_data_tac_and_naive_s1ulp_right$Condition <- factor(pnn_data_tac_and_naive_s1ulp_right$Condition,
+                                                levels = c("WT", "Het", "TacWT", "TacHet"))
+
+#Stats label for plot
+overall_label <-  create_test_label(description = "T-test",
+                                        statistic.text = quote(italic(T)),
+                                        statistic = 3.394, p = "0.0041", n = 506,
+                                        detailed = TRUE, type = "expression")
+
+fig_22 <- ggplot(aes(x=Condition, y=Mean.2, fill=Cohort), data = pnn_data_tac_and_naive_s1ulp_right)+
+  geom_violin(colour="black", fill="white", draw_quantiles = c(0.25, 0.50, 0.75))+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 30),
+        axis.line = element_line(colour = "black"),
+        axis.text = element_text(face = "bold", size = 20),
+        legend.position = "right")+
+  xlab("")+
+  ylab("PNN Intensity")+
+  geom_signif(y_position = 105, tip_length = 0, annotations = "**", xmin = 1, xmax = 2)+
+  ggtitle("6 Week Tactile vs. Previous PNN S1ULp Right Hemisphere Data")+
+  labs(subtitle = overall_label)
+
+
+fig_22 <- fig_22 + scale_x_discrete(breaks = c("WT","Het", "TacWT", "TacHet"),
+                                  labels = c("WT \n(n = 187)",
+                                             "Het \n(n = 180)",
+                                             "TacWT \n(n = 77)",
+                                             "TacHet \n(n = 62)"))
+
+
+
+
+pnn_coh1_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="021621" & Condition=="TacWT")
+pnn_coh1_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="021621" & Condition=="TacHet")
+
+pnn_coh2_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="061321A" & Condition=="TacWT")
+pnn_coh2_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="061321A" & Condition=="TacHet")
+
+pnn_coh3_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="061321B" & Condition=="TacWT")
+pnn_coh3_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="061321B" & Condition=="TacHet")
+
+pnn_coh4_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="102319" & Condition=="WT")
+pnn_coh4_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="102319" & Condition=="Het")
+
+pnn_coh5_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="103119" & Condition=="WT")
+pnn_coh5_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="103119" & Condition=="Het")
+
+pnn_coh6_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="121119A" & Condition=="WT")
+pnn_coh6_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="121119A" & Condition=="Het")
+
+pnn_coh7_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="121119B" & Condition=="WT")
+pnn_coh7_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="121119B" & Condition=="Het")
+
+pnn_coh8_wt <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="21620" & Condition=="WT")
+pnn_coh8_het <- filter(pnn_data_tac_and_naive_s1ulp_right, Cohort=="21620" & Condition=="Het")
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="021621"), data = pnn_coh1_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321A"), data = pnn_coh2_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="061321B"), data = pnn_coh3_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="102319"), data = pnn_coh4_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="103119"), data = pnn_coh5_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119A"), data = pnn_coh6_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="121119B"), data = pnn_coh7_het)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_wt)
+
+fig_22 <- fig_22 + stat_summary(fun=mean, geom="point", shape=21,
+                                        size=5, aes(fill="21620"), data = pnn_coh8_het)
+
+
+fig_22 <- fig_22 + scale_fill_manual(values = c("021621"="blue", 
+                                              "061321A"="purple", 
+                                              "061321B"="green",
+                                              "102319"="pink", 
+                                              "103119"="red", 
+                                              "121119A"="sky blue",
+                                              "121119B"="magenta",
+                                              "21620"="orange"))
+
+```
+
+```{r displaying s1ulp tac vs other pnn data right hemi plot}
+fig_22
+```
+```{r saving fig17 to .svg and .png}
+ggsave(filename = "fig17.png",
+       plot     = print(fig_17, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+
+ggsave(filename = "fig17.svg",
+       plot     = print(fig_17, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+```
+
+```{r saving fig18 to .svg and .png}
+ggsave(filename = "fig18.png",
+       plot     = print(fig_18, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+
+ggsave(filename = "fig18.svg",
+       plot     = print(fig_18, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+```
+
+```{r saving fig19 to .svg and .png}
+ggsave(filename = "fig19.png",
+       plot     = print(fig_19, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+
+ggsave(filename = "fig19.svg",
+       plot     = print(fig_19, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+```
+
+```{r saving fig20 to .svg and .png}
+ggsave(filename = "fig20.png",
+       plot     = print(fig_20, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+
+ggsave(filename = "fig20.svg",
+       plot     = print(fig_20, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+```
+
+```{r saving fig21 to .svg and .png}
+ggsave(filename = "fig21.png",
+       plot     = print(fig_21, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+
+ggsave(filename = "fig21.svg",
+       plot     = print(fig_21, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+```
+
+```{r saving fig22 to .svg and .png}
+ggsave(filename = "fig22.png",
+       plot     = print(fig_22, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+
+ggsave(filename = "fig22.svg",
+       plot     = print(fig_22, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 20, height = 20,
+       units    = "cm")
+```
+
+## Overall conclusion: When considering the ICC values it is important to take into account possible confounding as it relates to `Cohort` and `Subregion` in the entire PNN dataset. These values have moderate data dependence based on their ICC values of `0.2233726` and `0.2628402` respectively. We can alleviate the possible confounding of subregion by only examining specific subregions. I have carried out analysis on the subregion that we were previously most interested in (S1BF) but I can easily extend this analysis to the other subregions if you all would like that. When the ICC analysis is carried out for `Cohort`, `Map.ID`, and `Coordinates` on the S1BF subregion data we see that `Cohort` has a high level of data dependence (0.5162284) and that there is moderate data dependence on `Coordinates` (0.228791). Given that we have two variables that have at least moderate data dependence we built an lme with two random effects (see here[https://stackoverflow.com/questions/36398100/specifying-multiple-separate-random-effects-in-nlme] and here[https://stats.stackexchange.com/questions/228800/crossed-vs-nested-random-effects-how-do-they-differ-and-how-are-they-specified] if you are interested in the stats) that take the data depenednece of both into account.   When carried out a linear mixed effects (lme) model analysis on just the S1BF subregion data we get a statistically significant result between the WT and Het groups. This holds true for both the Wald test and Maximum-likiliehood with very similar p-values (which is typical, but always good to check). We see that when comparing the `Tac` results to the previous cohorts of PNN data we see no statistically significant difference between the `Tac` results and the previous datasets. The only comparison that is statistically significant when doing a pairwise comparison is the previous NW vs. NH. All p-values for the `Tac` vs. previous PNN naive data have had multiple testing correction done through the tukey method.  It looks like `S1ULp` is the most common `Condition` by which we find statistically significant results. It also appears that statistically significant results are more often found in the right hemisphere than the left hemisphere. For the comparisons only datasets that yielded significant results were plotted when comparing the older PNN datasets to this newest `Tac` dataset. Also, only the statistically significant comparisons are shown in order to keep the plots from looking too crowded with many comparison lines. All of the plots are saved in `.svg` and `.png` formats. Let me know if you need another format. 

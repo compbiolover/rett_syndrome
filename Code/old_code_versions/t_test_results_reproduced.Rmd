@@ -1,0 +1,516 @@
+---
+title: "T-test Results Reproduced"
+author: "Andrew Willems and Tian Hong"
+date: "3/22/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## T-test Analysis
+
+The goal of this analysis is to replicate the t-test results seen in previous analysis
+
+## Step One
+Load needed packages. gt is used for making the nice tables. Magrittr is a package that allows us to use pipes (%>%) in our code.  Rstatix is used to do p-value correction. Tidyverse is used for data manipulation.
+```{r message=FALSE}
+#Loading needed packages
+library(gt)
+library(magrittr)
+library(rstatix)
+library(tidyverse)
+```
+## Step Two
+Load the data and make separate data frames that are comprised of only left or right hemisphere data.
+```{r}
+#Loading the data
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Data/")
+pnn_data <- read.csv("processed_data_PNN_3cohorts.csv", sep = "\t")
+pnn_data_left <- filter(pnn_data, Hemisphere=="Left")
+pnn_data_right <- filter(pnn_data, Hemisphere=="Right")
+table(pnn_data$Cohort)
+```
+## Step Three
+Look at how many of each condition we have in our data.
+```{r}
+#Make table to look at how many of each condition we have to know if we need to
+#use pooled standard deviation in our t-test
+table(pnn_data_left$Condition)
+table(pnn_data_right$Condition)
+```
+## Step Four
+Performing a simple calculation to determine if we need to do p-value adjustment or not because of running multiple tests. For reference on formula
+see Goldman tutorial doc (pdf included in slack) and Jafari et al.
+(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6099145/)
+
+```{r}
+#Performing a simple calculation to determine if we need to do p-value
+#adjustment or not because of running multiple tests. For reference on formula
+#see Goldman tutorial doc (pdf included in slack) and Jafari et al.
+#(https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6099145/)
+
+#We have 4 condition (NH, NW, SH, SW)
+rate_of_false_positives <- rep(0, 3)
+rate_of_false_positives[1] <- 1-(1 - 0.05)^4
+rate_of_false_positives[2] <- 1-(1 - 0.01)^4
+rate_of_false_positives[3] <- 1-(1 - 0.001)^4
+
+p_values <- c(0.05, 0.01, 0.001)
+fp_table <- data.frame(p_values, rate_of_false_positives)
+colnames(fp_table) <- c("P-value", "False Positive Rate")
+fp_table <- gt(fp_table)
+fp_table %>% tab_header(
+  title = "Uncorrected P-value Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("P-value", "False Positive Rate")
+) %>% fmt_percent(
+  columns = "False Positive Rate",
+  decimals = 1
+)
+```
+
+## Step Four
+Pairwise t-test for left hemisphere at p-value < 0.05.
+```{r}
+#Mean 2 left pairwise t-test
+pnn_data_left_sh_sw <- filter(pnn_data_left, Condition=="SH" | Condition=="SW")
+pnn_data_left_sh_nh <- filter(pnn_data_left, Condition=="SH" | Condition=="NH")
+pnn_data_left_sh_nw <- filter(pnn_data_left, Condition=="SH" | Condition=="NW")
+pnn_data_left_nh_nw <- filter(pnn_data_left, Condition=="NH" | Condition=="NW")
+pnn_data_left_nh_sw <- filter(pnn_data_left, Condition=="NH" | Condition=="SW")
+pnn_data_left_nw_sh <- filter(pnn_data_left, Condition=="NW" | Condition=="SH")
+pnn_data_left_nw_sw <- filter(pnn_data_left, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = pnn_data_left_sh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+sh_nh <- t_test(data = pnn_data_left_sh_nh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- 2.88
+
+sh_nw <- t_test(data = pnn_data_left_sh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- 4.06
+
+nh_nw <- t_test(data = pnn_data_left_nh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nh_sw <- t_test(data = pnn_data_left_nh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -2.19
+
+nw_sh <- t_test(data = pnn_data_left_nw_sh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nw_sw <- t_test(data = pnn_data_left_nw_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -2.31
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+
+pwc_left_mean2_gt <- left_hemi_df
+
+colnames(pwc_left_mean2_gt) <- c("Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic", "DF", "P-value", 
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_mean2_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic", "DF", "P-value", 
+              "P-value Significance")) %>%
+  tab_options(
+    container.width = 2000
+  )
+
+pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+gtsave(pwc_left_table, filename = "pwc_left_table_first_cohort_0_95.png",
+       path = "Figures/Tables/", vwidth=2000)
+```
+
+
+Pairwise t-test for right hemisphere at p-value < 0.05.
+```{r}
+#Mean 2 right pairwise t-test
+pnn_data_right_sh_sw <- filter(pnn_data_right, Condition=="SH" | Condition=="SW")
+pnn_data_right_sh_nh <- filter(pnn_data_right, Condition=="SH" | Condition=="NH")
+pnn_data_right_sh_nw <- filter(pnn_data_right, Condition=="SH" | Condition=="NW")
+pnn_data_right_nh_nw <- filter(pnn_data_right, Condition=="NH" | Condition=="NW")
+pnn_data_right_nh_sw <- filter(pnn_data_right, Condition=="NH" | Condition=="SW")
+pnn_data_right_nw_sh <- filter(pnn_data_right, Condition=="NW" | Condition=="SH")
+pnn_data_right_nw_sw <- filter(pnn_data_right, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = pnn_data_right_sh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+sh_nh <- t_test(data = pnn_data_right_sh_nh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- 2.36
+
+sh_nw <- t_test(data = pnn_data_right_sh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- 3.36
+
+nh_nw <- t_test(data = pnn_data_right_nh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nh_sw <- t_test(data = pnn_data_right_nh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -1.93
+
+nw_sh <- t_test(data = pnn_data_right_nw_sh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nw_sw <- t_test(data = pnn_data_right_nw_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.95)
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -2.13
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+
+pwc_right_mean2_gt <- right_hemi_df
+
+colnames(pwc_right_mean2_gt) <- c("Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic", "DF", "P-value", 
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_mean2_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic", "DF", "P-value", 
+              "P-value Significance")) %>%
+  tab_options(
+    container.width = 2000
+  )
+
+pwc_right_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+gtsave(pwc_right_table, filename = "pwc_right_table_first_cohort_0_95.png",
+       path = "Figures/Tables/", vwidth=2000)
+```
+
+## Step Five
+Do pairwise t-test for left hemisphere. Our comparison is condition (NH, SH, NW, SW) and how they relate to Mean 2. We use p-value < 0.01 because of a nearly 20% false positive rate.
+```{r}
+#Mean 2 left pairwise t-test
+pnn_data_left_sh_sw <- filter(pnn_data_left, Condition=="SH" | Condition=="SW")
+pnn_data_left_sh_nh <- filter(pnn_data_left, Condition=="SH" | Condition=="NH")
+pnn_data_left_sh_nw <- filter(pnn_data_left, Condition=="SH" | Condition=="NW")
+pnn_data_left_nh_nw <- filter(pnn_data_left, Condition=="NH" | Condition=="NW")
+pnn_data_left_nh_sw <- filter(pnn_data_left, Condition=="NH" | Condition=="SW")
+pnn_data_left_nw_sh <- filter(pnn_data_left, Condition=="NW" | Condition=="SH")
+pnn_data_left_nw_sw <- filter(pnn_data_left, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = pnn_data_left_sh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh <- t_test(data = pnn_data_left_sh_nh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- 2.88
+
+sh_nw <- t_test(data = pnn_data_left_sh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- 4.06
+
+nh_nw <- t_test(data = pnn_data_left_nh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw <- t_test(data = pnn_data_left_nh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -2.19
+
+nw_sh <- t_test(data = pnn_data_left_nw_sh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw <- t_test(data = pnn_data_left_nw_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -2.31
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+
+pwc_left_mean2_gt <- left_hemi_df
+
+colnames(pwc_left_mean2_gt) <- c("Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic", "DF", "P-value", 
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_mean2_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic", "DF", "P-value", 
+              "P-value Significance")) %>%
+  tab_options(
+    container.width = 2000
+  )
+
+pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+gtsave(pwc_left_table, filename = "pwc_left_table_first_cohort_0_99.png",
+       path = "Figures/Tables/", vwidth=2000)
+```
+
+## T-test of the right hemisphere data with p-value set to 0.01.
+```{r}
+#Subsetting to each individual combination to get same layout as seen in
+#previous analysis
+pnn_data_right_sh_sw <- filter(pnn_data_right, Condition=="SH" | Condition=="SW")
+pnn_data_right_sh_nh <- filter(pnn_data_right, Condition=="SH" | Condition=="NH")
+pnn_data_right_sh_nw <- filter(pnn_data_right, Condition=="SH" | Condition=="NW")
+pnn_data_right_nh_nw <- filter(pnn_data_right, Condition=="NH" | Condition=="NW")
+pnn_data_right_nh_sw <- filter(pnn_data_right, Condition=="NH" | Condition=="SW")
+pnn_data_right_nw_sh <- filter(pnn_data_right, Condition=="NW" | Condition=="SH")
+pnn_data_right_nw_sw <- filter(pnn_data_right, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = pnn_data_right_sh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh <- t_test(data = pnn_data_right_sh_nh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- 2.36
+
+sh_nw <- t_test(data = pnn_data_right_sh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- 3.36
+
+nh_nw <- t_test(data = pnn_data_right_nh_nw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw <- t_test(data = pnn_data_right_nh_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -1.93
+
+nw_sh <- t_test(data = pnn_data_right_nw_sh, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw <- t_test(data = pnn_data_right_nw_sw, formula = Mean.2~Condition,
+                p.adjust.method = "none", conf.level = 0.99)
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -2.13
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1, levels = c("NH", "SW",
+                                                                "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2, levels = c("SW", "NH",
+                                                                "NW"))
+
+
+pwc_right_mean2_gt <- right_hemi_df
+
+colnames(pwc_right_mean2_gt) <- c("Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic", "DF", "P-value", 
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_mean2_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis"
+) %>% cols_align(
+  align = "center",
+  columns = c("Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic", "DF", "P-value", 
+              "P-value Significance"))
+
+pwc_right_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+gtsave(pwc_left_table, filename = "pwc_right_table_first_cohort_0_99.png",
+       path = "Figures/Tables/", vwidth=2000)
+
+```
+
+## Step Seven
+Plotting the heat map of the non-adjusted right hemisphere data (p-value < 0.05).
+```{r}
+#Heatmap for Mean 2 right un-adjusted hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df, aes(x=group1, y=group2,
+                                                 fill=statistic))+
+  geom_tile()+
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+        legend.key.height = unit(60, units = "pt"))+
+  ggtitle("Mean 2 Right")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/old_right_cohort_t_test_0_95.png",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+```
+
+
+Plotting the heatmap of the non-adjusted left hemisphere data (p-value < 0.05).
+```{r}
+#Heatmap for Mean 2 left un-adjusted hemisphere
+mid <- 0
+
+left_heatmap <-ggplot(data = left_hemi_df, aes(x=group1, y=group2,
+                                               fill=statistic))+
+  geom_tile()+
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+        legend.key.height = unit(60, units = "pt"))+
+  ggtitle("Mean 2 Left")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/old_left_cohort_t_test_0_95.png",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+```
+
+## Step Eight
+Plotting the heat map of the non-adjusted right hemisphere data (p-value < 0.01).
+```{r}
+#Heatmap for Mean 2 right un-adjusted hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df, aes(x=group1, y=group2,
+                                                 fill=statistic))+
+  geom_tile()+
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+        legend.key.height = unit(60, units = "pt"))+
+  ggtitle("Mean 2 Right")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/old_right_cohort_t_test_0_99.png",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+```
+
+## Plotting the heatmap of the non-adjusted left hemisphere data (p-value < 0.01).
+```{r}
+#Heatmap for Mean 2 left un-adjusted hemisphere
+mid <- 0
+
+left_heatmap <-ggplot(data = left_hemi_df, aes(x=group1, y=group2,
+                                               fill=statistic))+
+  geom_tile()+
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+        legend.key.height = unit(60, units = "pt"))+
+  ggtitle("Mean 2 Left")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Figures/Reproduced_t_tests/old_left_cohort_t_test_0_99.png",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "png", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+```
+
+## Conclusion
+I have been able to successfully reproduce the t-tests seen in the previous analysis. Due to a predicted  ~20% type I error rate I suggest we use a p-value of 0.01 as its predicted error rate is much closer to our alpha value. The results make sense to me. We see the same results even with this lower alpha value threshold. 

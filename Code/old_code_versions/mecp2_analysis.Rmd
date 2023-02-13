@@ -1,0 +1,188 @@
+---
+title: "MECP2 Analysis"
+author: "Andrew Willems and Tian Hong"
+date: "4/17/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+We are doing  analysis on the new set of cohorts from the Krishnan lab for MECP2. First, we use intraclass correlation coefficient (ICC) values of the Cohort and Map variables to determine if we need to build linear mixed effects models. 
+
+## Step One
+Load needed packages. emmeans is used to perform the pairwise analysis. gt is used for making the nice tables. ICC is used to calculate the intraclass correlation coefficient to tell us if we can treat our predictors (variables) as independent or not. Magrittr is a package that allows us to use pipes (%>%) in our code. mclust allows us to build Gaussian mixture models. modelsummary allows us to make our linear mixed effects (lme) model output more professional looking. nlme is the package that performs the lme model fit. Rstatix is used to do the pairwise t-tests and p-value correction. Tidyverse is used for data manipulation. webshot is used to save our gt tables as .png files.
+
+```{r message=FALSE, echo=FALSE}
+#Loading needed packages
+library(emmeans)
+library(gt)
+library(ICC)
+library(magrittr)
+library(mclust)
+library(modelsummary)
+library(nlme)
+library(rstatix)
+library(tidyverse)
+library(webshot)
+```
+
+## Step Two
+Load the data and make separate data frames that are comprised of only left or right hemisphere data.
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, results='hide'}
+#Loading the data
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Neuron_Project/Data/")
+mecp2_data <- read.csv("mecp2_raw_histogram_data.csv", sep = ",")
+mecp2_metadata <- mecp2_data[1:6,]
+mecp2_intensity <- mecp2_data[7:2164,2:817]
+mecp2_intensity <- apply(mecp2_intensity, 2, as.numeric)
+mecp2_intensity[is.na(mecp2_intensity)] <- 0
+mecp2_data_processed <- data.frame(Cell_type=as.character(mecp2_metadata[1,]),
+                                   Cohort=as.character(mecp2_metadata[2,]),
+                                   Condition=as.character(mecp2_metadata[3,]),
+                                   Hemisphere=as.character(mecp2_metadata[4,]),
+                                   Image=as.character(mecp2_metadata[5,]),
+                                   Cell_number=as.character(mecp2_metadata[6,]))
+
+mecp2_data_processed <- mecp2_data_processed[2:817,]
+
+head(mecp2_data_processed, n=20)
+```
+
+
+```{r message=FALSE, fig.show='hide', echo=FALSE, eval=FALSE}
+#Doing density estimates for each of the columns of our data frame to get 
+#means for further analysis
+gmm_mod <- apply(mecp2_intensity, 2, densityMclust, G = 2)
+```
+
+```{r echo=TRUE, message=TRUE, eval=FALSE}
+#Plotting the results and saving mean 1 and mean 2 to do more analysis later
+first_means <- rep(0, 816)
+second_means <- rep(0, 816)
+#all_plots <- vector(mode = "list", length = 7344)
+counter <- 1
+for(gm in gmm_mod){
+  current_mod <- gm
+  first_means[counter] <- current_mod$parameters$mean[1]
+  second_means[counter] <- current_mod$parameters$mean[2]
+  
+  current_mod_ggplot <- as.data.frame(current_mod$density)
+  colnames(current_mod_ggplot) <- "density"
+  current_mod_ggplot$mean1 <- first_means[counter]
+  current_mod_ggplot$mean2 <- second_means[counter]
+  density_plot <- ggplot(data = current_mod_ggplot, aes(x=density)) +
+    geom_density(color="blue",
+                 fill= "#87ceeb",
+                 alpha=0.8) +
+    theme(panel.background = element_blank())+
+    xlab("Intensity")+ ylab("Density")
+  counter <- counter + 1
+  #plot(current_mod, what = "density", data = mecp2_intensity, breaks = 15, xlab= "Intensity", ylab= "Density", col="blue")
+}
+
+```
+
+```{r}
+#Now appending the mean 1 to the other metadata for this MECP2 data set
+mecp2_data_processed$Mean1 <- first_means
+head(mecp2_data_processed, n=22)
+```
+```{r echo=FALSE}
+#Now separating the data set into left and right hemisphere
+mecp2_data_processed$Cohort <- gsub(x = mecp2_data_processed$Cohort,
+                                    pattern = "#", 
+                                    replacement = "")
+table(mecp2_data_processed$Cohort)
+mecp2_right <- filter(mecp2_data_processed, Hemisphere=="RH")
+mecp2_left <- filter(mecp2_data_processed, Hemisphere=="LH")
+table(mecp2_right$Hemisphere)
+table(mecp2_left$Hemisphere)
+```
+
+```{r}
+#Right hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean1, data = mecp2_right)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean1, data = mecp2_right)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean1, data = mecp2_right)
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  right hemisphere MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r}
+#Left hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean1, data = mecp2_left)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean1, data = mecp2_left)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean1, data = mecp2_left)
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  left hemisphere MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+```{r}
+#Now building an LME for right hemisphere because of the high ICC of Cell type
+lme_mod_right=lme(Mean1~Condition, data= mecp2_right, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_right,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Right Hemisphere",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW", "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+```{r}
+#Now building an LME for left hemisphere because of the high ICC of Cell type
+lme_mod_left=lme(Mean1~Condition, data= mecp2_left, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_left,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Left Hemisphere",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW", "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+

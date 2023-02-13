@@ -1,0 +1,7 @@
+Image naming convention:
+
+z#-z# = images are taken as z stacks (essentially 3d image) these are the numbers of the sections in that stack that were taken to make the image
+SW,SH,NW,NH = surrogate wild type, surrogate het, naive wild type, naive het
+R or LWx= R and L are the side of the brain that these sections are from, as they were cut sagitally (essentially sideways through the brain). W just stands for well, and the number is the number of the well in the 16 well plates that we use to collect the tissues
+x.x = slide naming convention, essentially just which tissue is in the image, EX: 1.3 is the first row, 3rd tissue in that row
+Map 128 = we use map numbers in a brain atlas to know where we are in the brain. The map number is where this section falls in the brain (most are from the same map number)

@@ -1,0 +1,808 @@
+---
+title: "Jacob Analysis 1"
+author: "Andrew Willems and Tian Hong"
+date: "2022-11-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/Krishnan-Analysis/")
+```
+
+## Jacob Analysis 1
+```{r loading needed packages}
+library(caret)
+library(class)
+library(deldir)
+library(effectsize)
+library(ggforce)
+library(ggsignif)
+library(rstatix)
+library(readxl)
+library(tidyverse)
+```
+
+
+```{r loading data}
+naive_df_wt <- read_excel("Data/Jacob/12WO_NAIVE_013118_S1BF_CELLP_EXP.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Jacob/12WO_NAIVE_013118_S1BF_CELLP_EXP.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Jacob/12WO_SUR_013118_S1BF_CELLP_EXP.xlsx", sheet = "WT")
+sur_df_het <- read_excel("Data/Jacob/12WO_SUR_013118_S1BF_CELLP_EXP.xlsx", sheet = "HET")
+```
+
+```{r subsetting data}
+naive_df_wt <- subset(naive_df_wt, select = c(1:8))
+naive_df_het <- subset(naive_df_het, select = c(1:8))
+sur_df_wt <- subset(sur_df_wt, select = c(1:8))
+sur_df_het <- subset(sur_df_het, select = c(1:8))
+
+colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+
+naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
+naive_df_het$condition <- rep("HET", nrow(naive_df_het))
+sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
+sur_df_het$condition <- rep("HET", nrow(sur_df_het))
+```
+
+
+
+```{r naive wt v het t-test}
+merged_naive <- bind_rows(naive_df_wt, naive_df_het)
+write.csv(merged_naive, file = "Data/merged_naive.csv")
+my_sd <- merged_naive %>%
+  group_by(condition) %>%
+  summarise(my_sd = sd(mean))
+naive_t_test <- t.test(formula = mean ~ condition, data = merged_naive)
+naive_eff_size <- cohens_d(mean ~ condition, data = merged_naive)
+interpret_cohens_d(naive_eff_size$Cohens_d)
+```
+
+```{r plot of naive wt v het t-test}
+merged_naive$condition <- factor(merged_naive$condition, levels = c("WT", "HET"))
+p1 <- ggplot(aes(x = condition, y = mean), data = merged_naive) +
+  geom_violin() +
+  geom_point() +
+  geom_sina() +
+  xlab("Condition") +
+  ylab("Mean") +
+  ggtitle("Mean vs. Condition") +
+  geom_signif(annotations = formatC(naive_t_test$p.value, digits = 2), y_position = 170, xmin = 1, xmax = 2, textsize = 8) +
+  theme(
+    panel.background = element_blank(),
+    plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 22),
+    axis.text = element_text(size = 18)
+  )
+p1
+```
+
+
+
+```{r sur wt v het t-test}
+merged_sur <- bind_rows(sur_df_wt, sur_df_het)
+write.csv(merged_sur, file = "Data/merged_sur.csv")
+my_sd <- merged_sur %>%
+  group_by(condition) %>%
+  summarise(my_sd = sd(mean))
+sur_t_test <- t.test(formula = mean ~ condition, data = merged_sur)
+sur_eff_size <- cohens_d(mean ~ condition, data = merged_sur)
+interpret_cohens_d(sur_eff_size$Cohens_d)
+```
+
+```{r naive wt v sur wt t-test}
+naive_df_wt$condition_wt_comp <- rep("naive", nrow(naive_df_wt))
+sur_df_wt$condition_wt_comp <- rep("sur", nrow(sur_df_wt))
+merged_wt <- bind_rows(naive_df_wt, sur_df_wt)
+write.csv(merged_sur, file = "Data/merged_wt.csv")
+my_sd <- merged_wt %>%
+  group_by(condition) %>%
+  summarise(my_sd = sd(mean))
+wt_t_test <- t.test(formula = mean ~ condition_wt_comp, data = merged_wt)
+wt_eff_size <- cohens_d(mean ~ condition_wt_comp, data = merged_wt)
+interpret_cohens_d(wt_eff_size$Cohens_d)
+```
+
+```{r plot of naive v het t-test}
+merged_wt$condition_wt_comp <- factor(merged_wt$condition_wt_comp, levels = c("naive", "sur"))
+p5 <- ggplot(aes(x = condition_wt_comp, y = mean), data = merged_wt) +
+  geom_violin() +
+  geom_point() +
+  geom_sina() +
+  xlab("Condition") +
+  ylab("Mean") +
+  ggtitle("WT") +
+  geom_signif(annotations = formatC(wt_t_test$p.value, digits = 2), y_position = range(merged_wt$mean)[2] + 15, xmin = 1, xmax = 2, textsize = 8) +
+  theme(
+    panel.background = element_blank(),
+    plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 22),
+    axis.text = element_text(size = 18)
+  )
+p5
+```
+```{r naive het v sur het t-test}
+naive_df_wt$condition_wt_comp <- rep("naive", nrow(naive_df_wt))
+sur_df_wt$condition_wt_comp <- rep("sur", nrow(sur_df_wt))
+merged_wt <- bind_rows(naive_df_wt, sur_df_wt)
+write.csv(merged_sur, file = "Data/merged_wt.csv")
+my_sd <- merged_wt %>%
+  group_by(condition) %>%
+  summarise(my_sd = sd(mean))
+wt_t_test <- t.test(formula = mean ~ condition_wt_comp, data = merged_wt)
+wt_eff_size <- cohens_d(mean ~ condition_wt_comp, data = merged_wt)
+interpret_cohens_d(wt_eff_size$Cohens_d)
+```
+
+
+```{r plot of sur wt v het t-test}
+merged_sur$condition <- factor(merged_sur$condition, levels = c("WT", "HET"))
+p2 <- ggplot(aes(x = condition, y = mean), data = merged_sur) +
+  geom_violin() +
+  geom_point() +
+  geom_sina() +
+  xlab("Condition") +
+  ylab("Mean") +
+  ggtitle("Mean vs. Condition") +
+  geom_signif(annotations = formatC(sur_t_test$p.value, digits = 2), y_position = 240, xmin = 1, xmax = 2, textsize = 8) +
+  theme(
+    panel.background = element_blank(),
+    plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 22),
+    axis.text = element_text(size = 18)
+  )
+p2
+```
+
+
+
+```{r naive wt v het t-test area}
+my_sd <- merged_naive %>%
+  group_by(condition) %>%
+  summarise(my_sd = sd(mean))
+naive_t_test_area <- t.test(formula = area ~ condition, data = merged_naive)
+naive_eff_size_area <- cohens_d(area ~ condition, data = merged_naive)
+interpret_cohens_d(naive_eff_size_area$Cohens_d)
+```
+
+```{r sur wt v het t-test area}
+my_sd <- merged_sur %>%
+  group_by(condition) %>%
+  summarise(my_sd = sd(mean))
+sur_t_test_area <- t.test(formula = area ~ condition, data = merged_sur)
+sur_eff_size_area <- cohens_d(area ~ condition, data = merged_sur)
+interpret_cohens_d(sur_eff_size_area$Cohens_d)
+```
+
+
+```{r sur wt v het t-test area plot}
+merged_sur$condition <- factor(merged_sur$condition, levels = c("WT", "HET"))
+p3 <- ggplot(aes(x = condition, y = area), data = merged_sur) +
+  geom_violin() +
+  geom_point() +
+  geom_sina() +
+  xlab("Condition") +
+  ylab("Area") +
+  ggtitle("Area vs. Condition") +
+  geom_signif(annotations = formatC(sur_t_test_area$p.value, digits = 2), y_position = 150, xmin = 1, xmax = 2, textsize = 8) +
+  theme(
+    panel.background = element_blank(),
+    plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 22),
+    axis.text = element_text(size = 18)
+  )
+p3
+```
+
+
+```{r naive wt v het t-test area}
+merged_naive$condition <- factor(merged_naive$condition, levels = c("WT", "HET"))
+p4 <- ggplot(aes(x = condition, y = area), data = merged_naive) +
+  geom_violin(scale = "count") +
+  geom_point() +
+  geom_sina() +
+  xlab("Condition") +
+  ylab("Area") +
+  ggtitle("Area vs. Condition") +
+  geom_signif(annotations = formatC(naive_t_test_area$p.value, digits = 2), y_position = 2100, xmin = 1, xmax = 2, textsize = 8) +
+  theme(
+    panel.background = element_blank(),
+    plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 22),
+    axis.text = element_text(size = 18)
+  )
+p4
+```
+
+
+
+```{r saving all plots}
+plots <- list(p1, p2, p3, p4, p5)
+counter <- 1
+for (p in plots) {
+  ggsave(
+    filename = paste0("Figures/Jacob_analysis/fig_", counter, ".png"),
+    plot = print(p, newpage = FALSE),
+    device = "png", dpi = 600,
+    width = 7.5, height = 7.5,
+    units = "in"
+  )
+  counter <- counter + 1
+}
+```
+
+
+
+```{r replicating tian's results}
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+p1 <- ggplot(data = merged_df, aes(x = condition_spec, fill = mecp2_p)) +
+  geom_bar(position = position_dodge()) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("Cell Count") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+p1
+```
+
+```{r saving condition v cell count plot}
+ggsave(
+  filename = "Figures/Jacob_analysis/condition_vs_cell_count.png",
+  plot = print(p1, newpage = FALSE),
+  device = "png", dpi = 600,
+  width = 7.5, height = 7.5,
+  units = "in"
+)
+```
+
+```{r verifying the knn score panels}
+nearest_neighbors <- function(x, obs, k, FUN, p = NULL) {
+  # Check the number of observations is the same
+  if (ncol(x) != ncol(obs)) {
+    stop("Data must have the same number of variables")
+  }
+
+  # Calculate distance, considering p for Minkowski
+  if (is.null(p)) {
+    dist <- apply(x, 1, FUN, obs)
+  } else {
+    dist <- apply(x, 1, FUN, obs, p)
+  }
+
+  # Find closest neighbors
+  distances <- sort(dist)[1:k]
+  if (k == 1) {
+    neighbor_ind <- which(dist %in% sort(dist)[1])
+  } else {
+    neighbor_ind <- which(dist %in% sort(dist)[1:k])
+  }
+
+  if (length(neighbor_ind) != k) {
+    warning(
+      paste("Several variables with equal distance. Used k:", length(neighbor_ind), "\n")
+    )
+    print(neighbor_ind)
+    neighbor_ind <- neighbor_ind[1]
+    print(neighbor_ind)
+  }
+
+  ret <- list(neighbor_ind, distances)
+  return(ret)
+}
+```
+
+
+
+
+```{r verification that my knn code works as expected}
+euclidean_distance <- function(a, b) {
+  #  We check that they have the same number of observation
+  if (length(a) == length(b)) {
+    sqrt(sum((a - b)^2))
+  } else {
+    stop("Vectors must be of the same length")
+  }
+}
+
+
+x <- iris[1:(nrow(iris) - 1), ]
+obs <- iris[nrow(iris), ]
+
+ind <- nearest_neighbors(x[, 1:4], obs[, 1:4], k = 1, FUN = euclidean_distance)[[1]]
+as.matrix(x[ind, 1:4])
+```
+
+
+```{r nearest neighbor for condition specific data with k=1}
+# Splitting the data by condition to find KNNs
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$knn_1_label <- rep(0, nrow(current_img))
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+
+    my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 1, FUN = euclidean_distance)[[1]]
+    print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id," has an MECP2_P status of: ", as.matrix(my_x[my_ind, 6])))
+    nn_status <- as.data.frame(my_x[my_ind, 6])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    if (nn_status[1, ] == "P") {
+      current_img[r, "knn_1_label"] <- 1
+      p_score <- p_score + 1
+    } else {
+      current_img[r, "knn_1_label"] <- 0
+      n_score <- n_score + 1
+    }
+  }
+  write.csv(current_img, paste0("Data/Jacob/img_knn_1_", i, "_df.csv"))
+  write.csv(p_score, paste0("Data/Jacob/img_knn_1_", i, "_df_p_score.csv"))
+  write.csv(n_score, paste0("Data/Jacob/img_knn_1_", i, "_df_n_score.csv"))
+}
+```
+
+
+```{r nearest neighbor for all data with k=1}
+#All images together in one dataset
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+merged_df$knn_1_label <- rep(0, nrow(merged_df))
+  for (r in 1:nrow(merged_df)) {
+    my_obs <- merged_df[r, ]
+    my_x <- filter(merged_df, id != my_obs$id)
+
+    my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 1, FUN = euclidean_distance)[[1]]
+    nn_status <- as.data.frame(my_x[my_ind, 6])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    if (nn_status[1,] == "P") {
+      img_df[r, "knn_1_label"] <- 1
+      p_score <- p_score + 1
+    } else {
+      img_df[r, "knn_1_label"] <- 0
+      n_score <- n_score + 1
+    }
+  }
+  write.csv(img_df, paste0("Data/Jacob/img_knn_1_all_imgs_", x, "_df.csv"))
+  write.csv(wt_score, paste0("Data/Jacob/img_knn_1_all_imgs_", x, "_df_p_score.csv"))
+  write.csv(het_score, paste0("Data/Jacob/img_knn_1_all_imgs_", x, "_df_n_score.csv"))
+```
+
+```{r plotting for all knn = 1 all data}
+p1 <- ggplot(data = merged_df, aes(x = condition_spec, y = knn_1_label, fill = mecp2_p)) +
+  geom_violin(position = position_dodge()) +
+  geom_jitter(position = position_jitterdodge()) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("1NN score ") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+
+ggsave(plot = p1, filename = paste0("Figures/Jacob_analysis/knn_1.png"),
+       device = "png", dpi = 600,
+       width = 7.5, height = 7.5,
+       units = "in")
+
+p1
+```
+
+
+
+```{r plotting the knn graph with k=1}
+all_dfs <- vector(mode = "list", length = 15)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Data/Jacob/img_knn_1_", i, "_df.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+knn_1_df <- bind_rows(all_dfs)
+
+knn_1_df$condition_spec <- factor(knn_1_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+p1 <- ggplot(data = knn_1_df, aes(x = condition_spec, y = knn_1_label, fill = mecp2_p)) +
+  geom_violin(trim = FALSE, scale = "area")+
+  geom_jitter(position = position_jitterdodge(jitter.height = 0.3, jitter.width = 0.2))+
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("1NN score ") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+
+ggsave(
+  plot = p1, filename = "Figures/Jacob_analysis/knn_1_fig_jitter_doge.png",
+  device = "png", dpi = 600,
+  width = 7.5, height = 7.5,
+  units = "in"
+)
+
+# T-tests for the different conditions
+knn_1_df$p_num <- knn_1_df$mecp2_p
+knn_1_df$p_num <- gsub(x = knn_1_df$p_num,replacement = 1, pattern = "P")
+knn_1_df$p_num <- gsub(x = knn_1_df$p_num,replacement = 0, pattern = "N")
+t.test(knn_1_df$p_num, y = knn_1_df$knn_1_label)
+knn_1_df %>% group_by(condition_spec) %>% 
+   do( tidy(t.test(data=., knn_1_label~p_num)))
+```
+
+```{r image specific knn = 3 data}
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+
+merged_df$knn_3_label <- rep(0, nrow(merged_df))
+for (r in 1:nrow(merged_df)) {
+  my_obs <- merged_df[r, ]
+  my_x <- filter(merged_df, id != my_obs$id)
+  
+  my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 3, FUN = euclidean_distance)[[1]]
+  print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id," has an MECP2_P status of: ", as.matrix(my_x[my_ind, 6])))
+  nn_status <- as.data.frame(my_x[my_ind, 6])
+  nn_info <- as.data.frame(my_x[my_ind, 1:11])
+  current_img[r, "knn_3_label"] <- sum(nn_status$mecp2_p == "P") / 3
+}
+write.csv(current_img,"Data/Jacob/img_knn_3_df.csv")
+```
+
+
+```{r nearest neighbor for all data with k=3}
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$knn_3_label <- rep(0, nrow(current_img))
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+
+    my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 3, FUN = euclidean_distance)[[1]]
+    print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id," has an MECP2_P status of: ", as.matrix(my_x[my_ind, 6])))
+    nn_status <- as.data.frame(my_x[my_ind, 6])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    current_img[r, "knn_3_label"] <- sum(nn_status$mecp2_p == "P") / 3
+  }
+  write.csv(current_img, paste0("Data/Jacob/img_knn_3_", i, "_df.csv"))
+}
+
+
+
+all_dfs <- vector(mode = "list", length = 15)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Data/Jacob/img_knn_3_", i, "_df.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+knn_3_df <- bind_rows(all_dfs)
+
+knn_3_df$condition_spec <- factor(knn_3_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+p1 <- ggplot(data = knn_3_df, aes(x = condition_spec, y = knn_3_label, fill = mecp2_p)) +
+  geom_violin(trim = FALSE, scale = "area")+
+  geom_jitter(position = position_jitterdodge(jitter.height = 0.3, jitter.width = 0.2))+
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("3NN score ") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+
+ggsave(
+  plot = p1, filename = "Figures/Jacob_analysis/knn_3_fig_jitter_doge.png",
+  device = "png", dpi = 600,
+  width = 7.5, height = 7.5,
+  units = "in"
+)
+
+# T-tests for the different conditions
+knn_3_df$p_num <- knn_3_df$mecp2_p
+knn_3_df$p_num <- gsub(x = knn_3_df$p_num, replacement = 1, pattern = "P")
+knn_3_df$p_num <- gsub(x = knn_3_df$p_num, replacement = 0, pattern = "N")
+knn_3_df$p_num <- as.numeric(knn_3_df$p_num)
+knn_3_df$knn_3_label <- as.numeric(knn_3_df$knn_3_label)
+t.test(knn_3_df$p_num, y = knn_3_df$knn_3_label)
+knn_3_df %>%
+  group_by(condition_spec) %>%
+  do(tidy(t.test(data = ., knn_3_label ~ p_num)))
+
+#Fisher's exact test
+# All data
+knn_3_fisher_df <- subset(knn_3_df, select = c(knn_3_label, p_num))
+knn_3_fisher_mat <- table(knn_3_fisher_df)
+fisher.test(knn_3_fisher_df_test_mat)
+
+#Condition subsets
+all_conds <- vector(mode = "list", length = 4)
+for (c in 1:length(table(knn_3_df$condition_spec))){
+  print(c)
+  current_sub <- filter(knn_3_df, condition_spec==unique(knn_3_df$condition_spec)[c])
+  print(current_sub$condition_spec)
+  current_sub <- subset(current_sub, select = c(knn_3_label, p_num))
+  print(fisher.test(current_sub))
+}
+```
+
+```{r nearest neighbor for all data with k=5}
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$knn_5_label <- rep(0, nrow(current_img))
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+
+    my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 5, FUN = euclidean_distance)[[1]]
+    print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id," has an MECP2_P status of: ", as.matrix(my_x[my_ind, 6])))
+    nn_status <- as.data.frame(my_x[my_ind, 6])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    current_img[r, "knn_5_label"] <- sum(nn_status$mecp2_p == "P") / 5
+  }
+  write.csv(current_img, paste0("Data/Jacob/img_knn_5_", i, "_df.csv"))
+}
+
+
+
+all_dfs <- vector(mode = "list", length = 15)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Data/Jacob/img_knn_5_", i, "_df.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+knn_5_df <- bind_rows(all_dfs)
+
+knn_5_df$condition_spec <- factor(knn_5_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+p1 <- ggplot(data = knn_5_df, aes(x = condition_spec, y = knn_5_label, fill = mecp2_p)) +
+  geom_violin(trim = FALSE, scale = "area")+
+  geom_jitter(position = position_jitterdodge(jitter.height = 0.3, jitter.width = 0.2))+
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("5NN score ") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+
+ggsave(
+  plot = p1, filename = "Figures/Jacob_analysis/knn_5_fig_jitter_doge.png",
+  device = "png", dpi = 600,
+  width = 7.5, height = 7.5,
+  units = "in"
+)
+
+# T-tests for the different conditions
+knn_5_df$p_num <- knn_5_df$mecp2_p
+knn_5_df$p_num <- gsub(x = knn_5_df$p_num, replacement = 1, pattern = "P")
+knn_5_df$p_num <- gsub(x = knn_5_df$p_num, replacement = 0, pattern = "N")
+knn_5_df$p_num <- as.numeric(knn_5_df$p_num)
+knn_5_df$knn_5_label <- as.numeric(knn_5_df$knn_5_label)
+t.test(knn_5_df$p_num, y = knn_5_df$knn_5_label)
+knn_5_df %>%
+  group_by(condition_spec) %>%
+  do(tidy(t.test(data = ., knn_5_label ~ p_num)))
+
+```
+
+
+```{r nearest neighbor for all data with k=9}
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$knn_9_label <- rep(0, nrow(current_img))
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+
+    my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 9, FUN = euclidean_distance)[[1]]
+    print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id," has an MECP2_P status of: ", as.matrix(my_x[my_ind, 6])))
+    nn_status <- as.data.frame(my_x[my_ind, 6])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    current_img[r, "knn_9_label"] <- sum(nn_status$mecp2_p == "P") / 9
+  }
+  write.csv(current_img, paste0("Data/Jacob/img_knn_9_", i, "_df.csv"))
+}
+
+
+
+all_dfs <- vector(mode = "list", length = 15)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Data/Jacob/img_knn_9_", i, "_df.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+knn_9_df <- bind_rows(all_dfs)
+
+knn_9_df$condition_spec <- factor(knn_9_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+p1 <- ggplot(data = knn_9_df, aes(x = condition_spec, y = knn_9_label, fill = mecp2_p)) +
+  geom_violin(trim = FALSE, scale = "area")+
+  geom_jitter(position = position_jitterdodge(jitter.height = 0.3, jitter.width = 0.2))+
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("9NN score ") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+
+ggsave(
+  plot = p1, filename = "Figures/Jacob_analysis/knn_9_fig_jitter_doge.png",
+  device = "png", dpi = 600,
+  width = 7.5, height = 7.5,
+  units = "in"
+)
+
+# T-tests for the different conditions
+knn_9_df$p_num <- knn_9_df$mecp2_p
+knn_9_df$p_num <- gsub(x = knn_9_df$p_num, replacement = 1, pattern = "P")
+knn_9_df$p_num <- gsub(x = knn_9_df$p_num, replacement = 0, pattern = "N")
+knn_9_df$p_num <- as.numeric(knn_9_df$p_num)
+knn_9_df$knn_9_label <- as.numeric(knn_9_df$knn_9_label)
+t.test(knn_9_df$p_num, y = knn_9_df$knn_9_label)
+knn_9_df %>%
+  group_by(condition_spec) %>%
+  do(tidy(t.test(data = ., knn_9_label ~ p_num)))
+
+```
+## All analaysis will need the images to be seperated and performed on an image by image basis using filter instead of all images (as I am currently doing it)
+
+```{r nearest neighbor for all data with k=21}
+p_score <- 0
+n_score <- 0
+
+merged_naive <- read.csv("Data/merged_naive.csv")
+merged_sur <- read.csv("Data/merged_sur.csv")
+merged_df <- bind_rows(merged_naive, merged_sur)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df <- filter(merged_df, mecp2_p != "NN")
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$knn_21_label <- rep(0, nrow(current_img))
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+
+    my_ind <- nearest_neighbors(my_x[, 8:9], my_obs[, 8:9], k = 21, FUN = euclidean_distance)[[1]]
+    print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id," has an MECP2_P status of: ", as.matrix(my_x[my_ind, 6])))
+    nn_status <- as.data.frame(my_x[my_ind, 6])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    current_img[r, "knn_21_label"] <- sum(nn_status$mecp2_p == "P") / 21
+  }
+  write.csv(current_img, paste0("Data/Jacob/img_knn_21_", i, "_df.csv"))
+}
+
+
+
+all_dfs <- vector(mode = "list", length = 15)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Data/Jacob/img_knn_21_", i, "_df.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+knn_21_df <- bind_rows(all_dfs)
+
+knn_21_df$condition_spec <- factor(knn_21_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+
+p1 <- ggplot(data = knn_21_df, aes(x = condition_spec, y = knn_21_label, fill = mecp2_p)) +
+  geom_violin(trim = FALSE, scale = "area")+
+  geom_jitter(position = position_jitterdodge(jitter.height = 0.3, jitter.width = 0.2))+
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 22),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+  ) +
+  xlab("Condition") +
+  ylab("21NN score ") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+
+ggsave(
+  plot = p1, filename = "Figures/Jacob_analysis/knn_21_fig_jitter_doge.png",
+  device = "png", dpi = 600,
+  width = 7.5, height = 7.5,
+  units = "in"
+)
+
+# T-tests for the different conditions
+knn_21_df$p_num <- knn_21_df$mecp2_p
+knn_21_df$p_num <- gsub(x = knn_21_df$p_num, replacement = 1, pattern = "P")
+knn_21_df$p_num <- gsub(x = knn_21_df$p_num, replacement = 0, pattern = "N")
+knn_21_df$p_num <- as.numeric(knn_21_df$p_num)
+knn_21_df$knn_21_label <- as.numeric(knn_21_df$knn_21_label)
+t.test(knn_21_df$p_num, y = knn_21_df$knn_21_label)
+knn_21_df %>%
+  group_by(condition_spec) %>%
+  do(tidy(t.test(data = ., knn_21_label ~ p_num)))
+
+```

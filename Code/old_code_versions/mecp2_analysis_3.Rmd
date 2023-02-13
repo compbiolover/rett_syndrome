@@ -1,0 +1,2231 @@
+---
+title: "MECP2 Analysis"
+author: "Andrew Willems and Tian Hong"
+date: "4/17/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+We are doing  analysis on the new set of cohorts from the Krishnan lab for MECP2. First, we use intraclass correlation coefficient (ICC) values of the Cohort, Cell type, Cell number, and Image variables to determine if we need to build linear mixed effects models. After investigating if we need LMEs we then create heat maps of the MECP2 data. We compare the differences in means between the various conditions.
+
+## Step One
+Load needed packages. emmeans is used to perform the pairwise analysis. gt is used for making the nice tables. ICC is used to calculate the intraclass correlation coefficient to tell us if we can treat our predictors (variables) as independent or not. Magrittr is a package that allows us to use pipes (%>%) in our code. mclust allows us to build Gaussian mixture models. modelsummary allows us to make our linear mixed effects (lme) model output more professional looking. nlme is the package that performs the lme model fit. Rstatix is used to do the pairwise t-tests and p-value correction. Tidyverse is used for data manipulation. webshot is used to save our gt tables as .png files.
+
+```{r message=FALSE, echo=FALSE}
+#Loading needed packages
+library(emmeans)
+library(gt)
+library(ICC)
+library(magrittr)
+library(mclust)
+library(modelsummary)
+library(nlme)
+library(rstatix)
+library(tidyverse)
+library(webshot)
+```
+
+## Step Two
+Load the data and make separate data frames that are comprised of only left or right hemisphere data. The warning here is okay. When I make all columns numeric it introduces some NAs because not all columns have the same number of rows (some just have no data in that row and therefore they get an NA). I fill those NAs in with a 0. 
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, results='hide', eval=TRUE, warning=FALSE}
+#Loading the data
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Data")
+mecp2_data <- read.csv("mecp2_raw_histogram_data.csv", sep = ",")
+mecp2_metadata_6wk <- mecp2_data[1:6,1:380]
+mecp2_metadata_12wk <- mecp2_data[1:6,381:816]
+mecp2_intensity <- mecp2_data[7:2164,2:817]
+mecp2_intensity_6wk <- mecp2_intensity[,1:380]
+mecp2_intensity_12wk <- mecp2_intensity[,381:816]
+mecp2_intensity_6wk <- apply(mecp2_intensity_6wk, 2, as.numeric)
+mecp2_intensity_12wk <- apply(mecp2_intensity_12wk, 2, as.numeric)
+mecp2_intensity_6wk[is.na(mecp2_intensity_6wk)] <- 0
+mecp2_intensity_12wk[is.na(mecp2_intensity_12wk)] <- 0
+mecp2_data_processed_6wk <- data.frame(Cell_type=as.character(mecp2_metadata_6wk[1,]),
+                                   Cohort=as.character(mecp2_metadata_6wk[2,]),
+                                   Condition=as.character(mecp2_metadata_6wk[3,]),
+                                   Hemisphere=as.character(mecp2_metadata_6wk[4,]),
+                                   Image=as.character(mecp2_metadata_6wk[5,]),
+                                   Cell_number=as.character(mecp2_metadata_6wk[6,]))
+
+
+mecp2_data_processed_12wk <- data.frame(Cell_type=as.character(mecp2_metadata_12wk[1,]),
+                                   Cohort=as.character(mecp2_metadata_12wk[2,]),
+                                   Condition=as.character(mecp2_metadata_12wk[3,]),
+                                   Hemisphere=as.character(mecp2_metadata_12wk[4,]),
+                                   Image=as.character(mecp2_metadata_12wk[5,]),
+                                   Cell_number=as.character(mecp2_metadata_12wk[6,]))
+
+
+
+mecp2_data_processed_6wk <- mecp2_data_processed_6wk[2:817,]
+mecp2_data_processed_12wk <- mecp2_data_processed_12wk[2:817,]
+
+head(mecp2_data_processed_6wk)
+head(mecp2_data_processed_12wk)
+dim(mecp2_data_processed_6wk)
+dim(mecp2_data_processed_12wk)
+```
+
+## Step Three: Building Gaussian Mixed Model (GMMs) for all of our data
+```{r message=FALSE, fig.show='hide', echo=FALSE, eval=TRUE, warning=FALSE}
+#Doing density estimates for each of the columns of our data frame to get 
+#means for further analysis for 6wk data
+gmm_mod_6wk <- apply(mecp2_intensity_6wk, 2, densityMclust, G = 2)
+```
+
+<<<<<<< HEAD
+```{r message=FALSE, fig.show='hide', echo=FALSE, eval=TRUE, warning=FALSE}
+=======
+```{r}
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+#Doing density estimates for each of the columns of our data frame to get 
+#means for further analysis for 12wk data
+gmm_mod_12wk <- apply(mecp2_intensity_12wk, 2, densityMclust, G = 2)
+```
+
+
+## Step Four: Now plotting and then saving all of the density plots for 6 week year old data 
+```{r echo=FALSE, message=FALSE, eval=TRUE}
+#Plotting the results and saving mean 1 and mean 2 to do more analysis later
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures")
+first_means_6wk <- rep(0, 816)
+second_means_6wk <- rep(0, 816)
+all_plots <- list()
+counter <- 1
+for(gm in gmm_mod_6wk){
+  current_mod <- gm
+  first_means_6wk[counter] <- current_mod$parameters$mean[1]
+  second_means_6wk[counter] <- current_mod$parameters$mean[2]
+  
+  current_mod_ggplot <- as.data.frame(current_mod$density)
+  colnames(current_mod_ggplot) <- "density"
+  current_mod_ggplot$mean1 <- first_means_6wk[counter]
+  current_mod_ggplot$mean2 <- second_means_6wk[counter]
+  density_plot <- ggplot(data = current_mod_ggplot, aes(x=density)) +
+    geom_density(color="blue",
+                 fill= "#87ceeb",
+                 alpha=0.8) +
+    theme(panel.background = element_blank())+
+    xlab("Intensity")+ ylab("Density")
+  len <- length(all_plots)
+  all_plots[[len+1]] <- density_plot
+  ggsave(filename = paste0("density_plot_mecp2_6wk_", len, ".svg"), device = "svg",
+         dpi = 300, height = 12, width = 12, unit= "cm", plot = density_plot)
+  counter <- counter + 1
+}
+
+```
+
+## For 12 week old data
+```{r echo=FALSE, message=FALSE, eval=TRUE}
+#Plotting the results and saving mean 1 and mean 2 to do more analysis later
+setwd("~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures")
+first_means_12wk <- rep(0, 816)
+second_means_12wk <- rep(0, 816)
+all_plots <- list()
+counter <- 1
+for(gm in gmm_mod_12wk){
+  current_mod <- gm
+  first_means_12wk[counter] <- current_mod$parameters$mean[1]
+  second_means_12wk[counter] <- current_mod$parameters$mean[2]
+  
+  current_mod_ggplot <- as.data.frame(current_mod$density)
+  colnames(current_mod_ggplot) <- "density"
+  current_mod_ggplot$mean1 <- first_means_12wk[counter]
+  current_mod_ggplot$mean2 <- second_means_12wk[counter]
+  density_plot <- ggplot(data = current_mod_ggplot, aes(x=density)) +
+    geom_density(color="blue",
+                 fill= "#87ceeb",
+                 alpha=0.8) +
+    theme(panel.background = element_blank())+
+    xlab("Intensity")+ ylab("Density")
+  len <- length(all_plots)
+  all_plots[[len+1]] <- density_plot
+  ggsave(filename = paste0("density_plot_mecp2_12wk_", len, ".svg"), device = "svg",
+         dpi = 300, height = 12, width = 12, unit= "cm", plot = density_plot)
+  counter <- counter + 1
+}
+```
+
+
+
+## Step Five: Adding the means of the GMM to our overall data frame
+```{r}
+#Now appending the mean 1 and mean 2 to the other metadata for this MECP2 data set for the 6 week and 12 week data frames
+mecp2_data_processed_6wk$Mean1 <- first_means_6wk
+mecp2_data_processed_6wk$Mean2 <- second_means_6wk
+head(mecp2_data_processed_6wk)
+
+mecp2_data_processed_12wk$Mean1 <- first_means_12wk
+mecp2_data_processed_12wk$Mean2 <- second_means_12wk
+head(mecp2_data_processed_12wk)
+```
+
+
+## Step Six: Now separating our data into left and right hemispheres and removing the # sign to keep our data clean
+```{r echo=FALSE}
+#Now separating the data set into left and right hemisphere
+mecp2_data_processed_6wk$Cohort <- gsub(x = mecp2_data_processed_6wk$Cohort,
+                                    pattern = "#", 
+                                    replacement = "")
+
+mecp2_data_processed_12wk$Cohort <- gsub(x = mecp2_data_processed_12wk$Cohort,
+                                    pattern = "#", 
+                                    replacement = "")
+
+
+mecp2_right_6wk <- filter(mecp2_data_processed_6wk, Hemisphere=="RH")
+mecp2_left_6wk <- filter(mecp2_data_processed_6wk, Hemisphere=="LH")
+
+mecp2_right_12wk <- filter(mecp2_data_processed_12wk, Hemisphere=="RH")
+mecp2_left_12wk <- filter(mecp2_data_processed_12wk, Hemisphere=="LH")
+```
+
+
+## Step Seven: Performing ICC analysis for right hemisphere. The small negative values represent that the ICC value is close to zero
+<<<<<<< HEAD
+## Right hemisphere 6 week Mean 1
+=======
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+```{r eval=TRUE, echo=FALSE}
+#Right hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean1, data = mecp2_right_6wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean1, data = mecp2_right_6wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean1, data = mecp2_right_6wk)
+
+#For Image
+icc_img <- ICCbare(x=factor(Image), y= Mean1, data = mecp2_right_6wk)
+
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  right hemisphere Mean 1 6 week MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+<<<<<<< HEAD
+## Right hemisphere 12 Week Mean 1
+```{r echo=FALSE}
+=======
+```{r}
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+#Right hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean1, data = mecp2_right_12wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean1, data = mecp2_right_12wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean1, data = mecp2_right_12wk)
+
+#For Image
+icc_img <- ICCbare(x=factor(Image), y= Mean1, data = mecp2_right_12wk)
+
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  right hemisphere Mean 1 12 week MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+<<<<<<< HEAD
+## Right hemisphere 6 week Mean 2
+=======
+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+```{r eval=TRUE, echo=FALSE}
+#Right hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean2, data = mecp2_right_6wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean2, data = mecp2_right_6wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean2, data = mecp2_right_6wk)
+
+#For Image
+icc_img <- ICCbare(x=factor(Image), y= Mean2, data = mecp2_right_6wk)
+
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  right hemisphere Mean 2 6 week MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+<<<<<<< HEAD
+## Right hemisphere 12 week Mean 2
+```{r echo=FALSE}
+=======
+
+```{r}
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+#Right hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean2, data = mecp2_right_12wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean2, data = mecp2_right_12wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean2, data = mecp2_right_12wk)
+
+#For Image
+icc_img <- ICCbare(x=factor(Image), y= Mean2, data = mecp2_right_12wk)
+
+
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Right Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  right hemisphere Mean 2 12 week MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+## Step Eight: Performing ICC analysis for left hemisphere. The small negative values indicate an ICC close to zero
+<<<<<<< HEAD
+## Left hemisphere 6 week Mean 1
+=======
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+```{r eval=TRUE, echo=FALSE}
+#Left hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean1, data = mecp2_left_6wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean1, data = mecp2_left_6wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean1, data = mecp2_left_6wk)
+
+#For Image
+icc_cell_img <- ICCbare(x=factor(Image), y= Mean1, data = mecp2_left_6wk)
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  left hemisphere Mean 1 6 week MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+<<<<<<< HEAD
+
+## Left hemisphere 12 week Mean 1
+```{r echo=FALSE}
+=======
+```{r}
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+#Left hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean1, data = mecp2_left_12wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean1, data = mecp2_left_12wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean1, data = mecp2_left_12wk)
+
+#For Image
+icc_cell_img <- ICCbare(x=factor(Image), y= Mean1, data = mecp2_left_12wk)
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  left hemisphere Mean 1 12 week MECP2 data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+<<<<<<< HEAD
+## Left hemisphere 6 week Mean 2
+=======
+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+```{r eval=TRUE, echo=FALSE}
+#Left hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean2, data = mecp2_left_6wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean2, data = mecp2_left_6wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean2, data = mecp2_left_6wk)
+
+#For Image
+icc_cell_img <- ICCbare(x=factor(Image), y= Mean2, data = mecp2_left_6wk)
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  left hemisphere Mean 2 MECP2 6 week data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+<<<<<<< HEAD
+
+## Left hemisphere 12 week Mean 2
+```{r echo=FALSE, eval=TRUE}
+=======
+```{r}
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+#Left hemisphere ICC analysis 
+#For Cohort
+icc_cohort <- ICCbare(x=factor(Cohort), y= Mean2, data = mecp2_left_12wk)
+
+#For Cell type
+icc_cell_type <- ICCbare(x=factor(Cell_type), y= Mean2, data = mecp2_left_12wk)
+
+
+#For Cell number
+icc_cell_num <- ICCbare(x=factor(Cell_number), y= Mean2, data = mecp2_left_12wk)
+
+#For Image
+icc_cell_img <- ICCbare(x=factor(Image), y= Mean2, data = mecp2_left_12wk)
+
+#Making a data frame
+icc_df <- data.frame(Cohort=icc_cohort, Cell_type=icc_cell_type,
+                     Cell_num=icc_cell_num, Image=icc_img)
+
+colnames(icc_df) <- c("Cohort", "Cell type", "Cell number", "Image")
+
+
+#Making that data frame a nicer looking table
+gt_icc <- gt(icc_df)
+gt_icc %>% tab_header(
+  title = "ICC for Left Hemisphere",
+  subtitle = "Intraclass Correlation Coefficient (ICC) for  left hemisphere Mean 2 MECP2 12 week data."
+ ) %>% cols_align(
+  align = "center",
+  columns = c("Cohort", "Cell type", "Cell number", "Image")
+ ) %>% opt_align_table_header(align = "center")
+```
+
+
+<<<<<<< HEAD
+=======
+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for right hemisphere because of the high ICC of Cell type
+lme_mod_right=lme(Mean1~Condition, data= mecp2_right_6wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_right,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Right Hemisphere Mean 1 6 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW", 
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for right hemisphere because of the high ICC of Cell type
+lme_mod_right=lme(Mean2~Condition, data= mecp2_right_6wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_right,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Right Hemisphere Mean 2 6 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW",
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for right hemisphere because of the high ICC of Cell type
+lme_mod_right=lme(Mean1~Condition, data= mecp2_right_6wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_right,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Right Hemisphere Mean 1 12 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW", 
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for right hemisphere because of the high ICC of Cell type
+lme_mod_right=lme(Mean2~Condition, data= mecp2_right_6wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_right,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Right Hemisphere Mean 2 12 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW",
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for left hemisphere because of the high ICC of Cell type
+lme_mod_left=lme(Mean1~Condition, data= mecp2_left_6wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_left,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Left Hemisphere Mean 1 6 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW", 
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for left hemisphere because of the high ICC of Cell type
+lme_mod_left=lme(Mean2~Condition, data= mecp2_left_6wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_left,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Left Hemisphere Mean 2 6 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW",
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for left hemisphere because of the high ICC of Cell type
+lme_mod_left=lme(Mean1~Condition, data= mecp2_left_12wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_left,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Left Hemisphere Mean 1 12 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW", 
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+```{r eval=TRUE, echo=FALSE, message=FALSE}
+#Now building an LME for left hemisphere because of the high ICC of Cell type
+lme_mod_left=lme(Mean2~Condition, data= mecp2_left_12wk, random = ~ 1|Cell_type)
+modelsummary(
+  lme_mod_left,
+  fmt = 1,
+  estimate  = "{estimate} {stars} [{conf.low}, {conf.high}]",
+  statistic = NULL,
+  conf_level = 0.99,
+  title = "Left Hemisphere Mean 2 12 Week",
+  coef_rename = c("(Intercept)" = "(Intercept) NH","ConditionNW" = "NW",
+                  "ConditionSH" = "SH", "ConditionSW" = "SW"))
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+#Given lack of interest in Cell type we will proceed with doing standard t-test
+#heat maps for the Condition to Mean 2 comparison
+#Subsetting to each individual combination to get same layout as seen in 
+#previous analysis
+mecp2_data_left_sh_sw_6wk <- filter(mecp2_left_6wk, Condition=="SH" | Condition=="SW")
+mecp2_data_left_sh_nh_6wk <- filter(mecp2_left_6wk, Condition=="SH" | Condition=="NH")
+mecp2_data_left_sh_nw_6wk <- filter(mecp2_left_6wk, Condition=="SH" | Condition=="NW")
+mecp2_data_left_nh_nw_6wk <- filter(mecp2_left_6wk, Condition=="NH" | Condition=="NW")
+mecp2_data_left_nh_sw_6wk <- filter(mecp2_left_6wk, Condition=="NH" | Condition=="SW")
+mecp2_data_left_nw_sh_6wk <- filter(mecp2_left_6wk, Condition=="NW" | Condition=="SH")
+mecp2_data_left_nw_sw_6wk <- filter(mecp2_left_6wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_left_sh_sw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_left_sh_nh_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+<<<<<<< HEAD
+
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$n1 <- 43
+sh_nh$n2 <- 48
+sh_nh$statistic <- 0.580
+sh_nh$estimate1 <- 4421
+sh_nh$estimate2 <- 4095
+sh_nh$estimate <- 325
+=======
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$n1 <- 97
+# sh_nh$n2 <- 100
+# sh_nh$statistic <- -1.27
+# sh_nh$estimate1 <- 3997
+# sh_nh$estimate2 <- 4565
+# sh_nh$estimate <- -568
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+
+sh_nw <- t_test(data = mecp2_data_left_sh_nw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+<<<<<<< HEAD
+sh_nw$statistic <- -0.426
+sh_nw$n1 <- 43
+sh_nw$n2 <- 43
+sh_nw$estimate1 <- 4421
+sh_nw$estimate2 <- 4695
+sh_nw$estimate <- -274
+=======
+# sh_nw$statistic <- -1.56
+# sh_nw$n1 <- 97
+# sh_nw$n2 <- 102
+# sh_nw$estimate1 <- 3997
+# sh_nw$estimate2 <- 4682
+# sh_nw$estimate <- -685
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_left_nh_nw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_left_nh_sw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+<<<<<<< HEAD
+nh_sw$statistic <- -0.546
+nh_sw$n1 <- 50
+nh_sw$n2 <- 48
+nh_sw$estimate1 <- 3827
+nh_sw$estimate2 <- 4095
+nh_sw$estimate <- -268
+=======
+# nh_sw$statistic <- 0.716
+# nh_sw$n1 <- 108
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 4903
+# nh_sw$estimate2 <- 4565
+# nh_sw$estimate <- 338
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nw_sh <- t_test(data = mecp2_data_left_nw_sh_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_left_nw_sw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+<<<<<<< HEAD
+nw_sw$statistic <- -1.49
+nw_sw$n1 <- 50
+nw_sw$n2 <- 43
+nw_sw$estimate1 <- 3827
+nw_sw$estimate2 <- 4695
+nw_sw$estimate <- -868
+=======
+# nw_sw$statistic <- 0.476
+# nw_sw$n1 <- 108
+# nw_sw$n2 <- 102
+# nw_sw$estimate1 <- 4903
+# nw_sw$estimate2 <- 4682
+# nw_sw$estimate <- 222
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+<<<<<<< HEAD
+left_hemi_df_mean2_6wk <- left_hemi_df
+=======
+left_hemi_df_mean2 <- left_hemi_df
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+pwc_left_mean2_gt <- left_hemi_df
+
+colnames(pwc_left_mean2_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_mean2_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean 2"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance")) %>%
+  tab_options(
+    table.width = pct(100)
+  )
+
+#pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_left_table, filename = "pwc_left_table_mecp2_mean2.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+#Given lack of interest in Cell type we will proceed with doing standard t-test
+#heat maps for the Condition to Mean 2 comparison
+#Subsetting to each individual combination to get same layout as seen in 
+#previous analysis
+mecp2_data_left_sh_sw_12wk <- filter(mecp2_left_12wk, Condition=="SH" | Condition=="SW")
+mecp2_data_left_sh_nh_12wk <- filter(mecp2_left_12wk, Condition=="SH" | Condition=="NH")
+mecp2_data_left_sh_nw_12wk <- filter(mecp2_left_12wk, Condition=="SH" | Condition=="NW")
+mecp2_data_left_nh_nw_12wk <- filter(mecp2_left_12wk, Condition=="NH" | Condition=="NW")
+mecp2_data_left_nh_sw_12wk <- filter(mecp2_left_12wk, Condition=="NH" | Condition=="SW")
+mecp2_data_left_nw_sh_12wk <- filter(mecp2_left_12wk, Condition=="NW" | Condition=="SH")
+mecp2_data_left_nw_sw_12wk <- filter(mecp2_left_12wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_left_sh_sw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_left_sh_nh_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+<<<<<<< HEAD
+
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$n1 <- 54 
+sh_nh$n2 <- 52
+sh_nh$statistic <- -2.07
+sh_nh$estimate1 <- 3636
+sh_nh$estimate2 <- 5046
+sh_nh$estimate <- -1411
+=======
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$n1 <- 97
+# sh_nh$n2 <- 100
+# sh_nh$statistic <- -1.27
+# sh_nh$estimate1 <- 3997
+# sh_nh$estimate2 <- 4565
+# sh_nh$estimate <- -568
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+
+sh_nw <- t_test(data = mecp2_data_left_sh_nw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+<<<<<<< HEAD
+sh_nw$statistic <- -1.73
+sh_nw$n1 <- 54
+sh_nw$n2 <- 59
+sh_nw$estimate1 <- 3636
+sh_nw$estimate2 <- 4671
+sh_nw$estimate <- -1035
+=======
+# sh_nw$statistic <- -1.56
+# sh_nw$n1 <- 97
+# sh_nw$n2 <- 102
+# sh_nw$estimate1 <- 3997
+# sh_nw$estimate2 <- 4682
+# sh_nw$estimate <- -685
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_left_nh_nw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_left_nh_sw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+<<<<<<< HEAD
+nh_sw$statistic <- 1.04
+nh_sw$n1 <- 58 
+nh_sw$n2 <- 52
+nh_sw$estimate1 <- 5833
+nh_sw$estimate2 <- 5046
+nh_sw$estimate <- 787
+
+=======
+# nh_sw$statistic <- 0.716
+# nh_sw$n1 <- 108
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 4903
+# nh_sw$estimate2 <- 4565
+# nh_sw$estimate <- 338
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nw_sh <- t_test(data = mecp2_data_left_nw_sh_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_left_nw_sw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+<<<<<<< HEAD
+nw_sw$statistic <- 1.71
+nw_sw$n1 <- 58
+nw_sw$n2 <- 59
+nw_sw$estimate1 <- 5833
+nw_sw$estimate2 <- 4671
+nw_sw$estimate <- 1162
+=======
+# nw_sw$statistic <- 0.476
+# nw_sw$n1 <- 108
+# nw_sw$n2 <- 102
+# nw_sw$estimate1 <- 4903
+# nw_sw$estimate2 <- 4682
+# nw_sw$estimate <- 222
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+<<<<<<< HEAD
+left_hemi_df_mean2_12wk <- left_hemi_df
+=======
+left_hemi_df_mean2 <- left_hemi_df
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+pwc_left_mean2_gt <- left_hemi_df
+
+colnames(pwc_left_mean2_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_mean2_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean 2"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance")) %>%
+  tab_options(
+    table.width = pct(100)
+  )
+
+#pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_left_table, filename = "pwc_left_table_mecp2_mean2.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+
+
+```{r echo=FALSE, message=FALSE}
+#Mean 1 left hemisphere
+mecp2_data_left_sh_sw_6wk <- filter(mecp2_left_6wk, Condition=="SH" | Condition=="SW")
+mecp2_data_left_sh_nh_6wk <- filter(mecp2_left_6wk, Condition=="SH" | Condition=="NH")
+mecp2_data_left_sh_nw_6wk <- filter(mecp2_left_6wk, Condition=="SH" | Condition=="NW")
+mecp2_data_left_nh_nw_6wk <- filter(mecp2_left_6wk, Condition=="NH" | Condition=="NW")
+mecp2_data_left_nh_sw_6wk <- filter(mecp2_left_6wk, Condition=="NH" | Condition=="SW")
+mecp2_data_left_nw_sh_6wk <- filter(mecp2_left_6wk, Condition=="NW" | Condition=="SH")
+mecp2_data_left_nw_sw_6wk <- filter(mecp2_left_6wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_left_sh_sw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_left_sh_nh_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$n1 <- 43
+sh_nh$n2 <- 48
+sh_nh$statistic <- 0.351
+sh_nh$estimate1 <- 844
+sh_nh$estimate2 <- 791
+sh_nh$estimate <- 52.6
+=======
+sh_nh
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$n1 <- 97
+# sh_nh$n2 <- 100
+# sh_nh$statistic <- -1.10
+# sh_nh$estimate1 <- 762
+# sh_nh$estimate2 <- 875
+# sh_nh$estimate <- -112
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+
+sh_nw <- t_test(data = mecp2_data_left_sh_nw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- -1.31
+sh_nw$n1 <- 43
+sh_nw$n2 <- 43
+sh_nw$estimate1 <- 844
+sh_nw$estimate2 <- 1060
+sh_nw$estimate <- -217
+=======
+sh_nw
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+# sh_nw$statistic <- -2.10
+# sh_nw$n1 <- 97
+# sh_nw$n2 <- 102
+# sh_nw$estimate1 <- 762
+# sh_nw$estimate2 <- 968
+# sh_nw$estimate <- -206
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_left_nh_nw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_left_nh_sw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- 0.178
+nh_sw$n1 <- 50
+nh_sw$n2 <- 48
+nh_sw$estimate1 <- 811
+nh_sw$estimate2 <- 791
+nh_sw$estimate <- 20.4
+=======
+nh_sw
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+# nh_sw$statistic <- 0.469
+# nh_sw$n1 <- 108
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 920
+# nh_sw$estimate2 <- 875
+# nh_sw$estimate <- 45.6
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nw_sh <- t_test(data = mecp2_data_left_nw_sh_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_left_nw_sw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -1.86
+nw_sw$n1 <- 50
+nw_sw$n2 <- 43
+nw_sw$estimate1 <- 811
+nw_sw$estimate2 <- 1060
+nw_sw$estimate <- -249
+=======
+nw_sw
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+# nw_sw$statistic <- -0.512
+# nw_sw$n1 <- 108
+# nw_sw$n2 <- 102
+# nw_sw$estimate1 <- 920
+# nw_sw$estimate2 <- 968
+# nw_sw$estimate <- -47.7
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+left_hemi_df_mean1_6wk <- left_hemi_df
+
+pwc_left_Mean1_gt <- left_hemi_df
+
+colnames(pwc_left_Mean1_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_Mean1_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean 1"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance")) %>%
+  tab_options(
+    table.width = pct(100)
+  )
+
+#pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_left_table, filename = "pwc_left_table_mecp2_mean1.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+```{r echo=FALSE, message=FALSE}
+#Mean 1 left hemisphere
+mecp2_data_left_sh_sw_12wk <- filter(mecp2_left_12wk, Condition=="SH" | Condition=="SW")
+mecp2_data_left_sh_nh_12wk <- filter(mecp2_left_12wk, Condition=="SH" | Condition=="NH")
+mecp2_data_left_sh_nw_12wk <- filter(mecp2_left_12wk, Condition=="SH" | Condition=="NW")
+mecp2_data_left_nh_nw_12wk <- filter(mecp2_left_12wk, Condition=="NH" | Condition=="NW")
+mecp2_data_left_nh_sw_12wk <- filter(mecp2_left_12wk, Condition=="NH" | Condition=="SW")
+mecp2_data_left_nw_sh_12wk <- filter(mecp2_left_12wk, Condition=="NW" | Condition=="SH")
+mecp2_data_left_nw_sw_12wk <- filter(mecp2_left_12wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_left_sh_sw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_left_sh_nh_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$n1 <- 54
+sh_nh$n2 <- 52
+sh_nh$statistic <- -1.81
+sh_nh$estimate1 <- 692
+sh_nh$estimate2 <- 952
+sh_nh$estimate <- -260
+=======
+sh_nh
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$n1 <- 97
+# sh_nh$n2 <- 100
+# sh_nh$statistic <- -1.10
+# sh_nh$estimate1 <- 762
+# sh_nh$estimate2 <- 875
+# sh_nh$estimate <- -112
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+
+sh_nw <- t_test(data = mecp2_data_left_sh_nw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- -1.78
+sh_nw$n1 <- 54
+sh_nw$n2 <- 59
+sh_nw$estimate1 <- 692
+sh_nw$estimate2 <- 901
+sh_nw$estimate <- -209
+=======
+sh_nw
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+# sh_nw$statistic <- -2.10
+# sh_nw$n1 <- 97
+# sh_nw$n2 <- 102
+# sh_nw$estimate1 <- 762
+# sh_nw$estimate2 <- 968
+# sh_nw$estimate <- -206
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_left_nh_nw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_left_nh_sw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- 0.405
+nh_sw$n1 <- 58
+nh_sw$n2 <- 52
+nh_sw$estimate1 <- 1014
+nh_sw$estimate2 <- 952
+nh_sw$estimate <- 61.9
+=======
+nh_sw
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+# nh_sw$statistic <- 0.469
+# nh_sw$n1 <- 108
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 920
+# nh_sw$estimate2 <- 875
+# nh_sw$estimate <- 45.6
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nw_sh <- t_test(data = mecp2_data_left_nw_sh_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_left_nw_sw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- 0.879
+nw_sw$n1 <- 58
+nw_sw$n2 <- 59
+nw_sw$estimate1 <- 1014
+nw_sw$estimate2 <- 901
+nw_sw$estimate <- 113
+=======
+nw_sw
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+# nw_sw$statistic <- -0.512
+# nw_sw$n1 <- 108
+# nw_sw$n2 <- 102
+# nw_sw$estimate1 <- 920
+# nw_sw$estimate2 <- 968
+# nw_sw$estimate <- -47.7
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+left_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+left_hemi_df <- left_hemi_df %>% add_significance("p")
+
+left_hemi_df$group1 <- factor(left_hemi_df$group1,
+                              levels = c("NH", "SW", "SH"))
+left_hemi_df$group2 <- factor(left_hemi_df$group2,
+                              levels = c("SW", "NH", "NW"))
+left_hemi_df_mean1_12wk <- left_hemi_df
+
+pwc_left_Mean1_gt <- left_hemi_df
+
+colnames(pwc_left_Mean1_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_left_gt <- gt(pwc_left_Mean1_gt)
+pwc_left_table <- pwc_left_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean 1"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance")) %>%
+  tab_options(
+    table.width = pct(100)
+  )
+
+#pwc_left_table
+
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_left_table, filename = "pwc_left_table_mecp2_mean1.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+## Do same as above but for right hemisphere data.
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, message=FALSE}
+#Subsetting to each individual combination to get same layout as seen in
+#previous analysis
+mecp2_data_right_sh_sw_6wk <- filter(mecp2_right_6wk, Condition=="SH" | Condition=="SW")
+mecp2_data_right_sh_nh_6wk <- filter(mecp2_right_6wk, Condition=="SH" | Condition=="NH")
+mecp2_data_right_sh_nw_6wk <- filter(mecp2_right_6wk, Condition=="SH" | Condition=="NW")
+mecp2_data_right_nh_nw_6wk <- filter(mecp2_right_6wk, Condition=="NH" | Condition=="NW")
+mecp2_data_right_nh_sw_6wk <- filter(mecp2_right_6wk, Condition=="NH" | Condition=="SW")
+mecp2_data_right_nw_sh_6wk <- filter(mecp2_right_6wk, Condition=="NW" | Condition=="SH")
+mecp2_data_right_nw_sw_6wk <- filter(mecp2_right_6wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_right_sh_sw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_right_sh_nh_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- -0.387
+sh_nh$n1 <- 46
+sh_nh$n2 <- 45
+sh_nh$estimate1 <- 3998
+sh_nh$estimate2 <- 4219
+sh_nh$estimate <- -220
+=======
+sh_nh
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$statistic <- -2.03
+# sh_nh$n1 <- 88
+# sh_nh$n2 <- 110
+# sh_nh$estimate1 <- 3433
+# sh_nh$estimate2 <- 4297
+# sh_nh$estimate <- -864
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+sh_nw <- t_test(data = mecp2_data_right_sh_nw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- -1.87
+sh_nw$n1 <- 46
+sh_nw$n2 <- 51
+sh_nw$estimate1 <- 3998
+sh_nw$estimate2 <- 5137
+sh_nw$estimate <- -1139
+=======
+sh_nw
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+# sh_nw$statistic <- -4.54
+# sh_nw$n1 <- 88
+# sh_nw$n2 <- 111
+# sh_nw$estimate1 <- 3433
+# sh_nw$estimate2 <- 5427
+# sh_nw$estimate <- -1994
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_right_nh_nw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_right_nh_sw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- -0.0741
+nh_sw$n1 <- 53
+nh_sw$n2 <- 45
+nh_sw$estimate1 <- 4177
+nh_sw$estimate2 <- 4219
+nh_sw$estimate <- -42.1
+=======
+nh_sw
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+# nh_sw$statistic <- 2.70
+# nh_sw$n1 <- 110
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 5667
+# nh_sw$estimate2 <- 4297
+# nh_sw$estimate <- 1370
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+nw_sh <- t_test(data = mecp2_data_right_nw_sh_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_right_nw_sw_6wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -1.58
+nw_sw$n1 <- 53
+nw_sw$n2 <- 51
+nw_sw$estimate1 <- 4177
+nw_sw$estimate2 <- 5137
+nw_sw$estimate <- -960
+=======
+nw_sw
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+# nw_sw$statistic <- 0.464
+# nw_sw$n1 <- 110
+# nw_sw$n2 <- 111
+# nw_sw$estimate1 <- 5667
+# nw_sw$estimate2 <- 5427
+# nw_sw$estimate <- 240
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1, levels = c("NH", "SW",
+                                                                "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2, levels = c("SW", "NH",
+                                                                "NW"))
+right_hemi_df_mean2_6wk <- right_hemi_df
+
+pwc_right_mean2_gt <- right_hemi_df
+
+colnames(pwc_right_mean2_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_mean2_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean 2"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance"))
+
+#pwc_right_table
+```
+
+```{r fig.show='hide', echo=FALSE}
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_right_table, filename = "pwc_right_table_mecp2_mean2.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, message=FALSE}
+#Subsetting to each individual combination to get same layout as seen in
+#previous analysis
+mecp2_data_right_sh_sw_12wk <- filter(mecp2_right_12wk, Condition=="SH" | Condition=="SW")
+mecp2_data_right_sh_nh_12wk <- filter(mecp2_right_12wk, Condition=="SH" | Condition=="NH")
+mecp2_data_right_sh_nw_12wk <- filter(mecp2_right_12wk, Condition=="SH" | Condition=="NW")
+mecp2_data_right_nh_nw_12wk <- filter(mecp2_right_12wk, Condition=="NH" | Condition=="NW")
+mecp2_data_right_nh_sw_12wk <- filter(mecp2_right_12wk, Condition=="NH" | Condition=="SW")
+mecp2_data_right_nw_sh_12wk <- filter(mecp2_right_12wk, Condition=="NW" | Condition=="SH")
+mecp2_data_right_nw_sw_12wk <- filter(mecp2_right_12wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_right_sh_sw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_right_sh_nh_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- -2.44
+sh_nh$n1 <- 40
+sh_nh$n2 <- 55
+sh_nh$estimate1 <- 2848
+sh_nh$estimate2 <- 4360
+sh_nh$estimate <- -1512
+=======
+sh_nh
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$statistic <- -2.03
+# sh_nh$n1 <- 88
+# sh_nh$n2 <- 110
+# sh_nh$estimate1 <- 3433
+# sh_nh$estimate2 <- 4297
+# sh_nh$estimate <- -864
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+sh_nw <- t_test(data = mecp2_data_right_sh_nw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- -4.55
+sh_nw$n1 <- 40
+sh_nw$n2 <- 60
+sh_nw$estimate1 <- 2848
+sh_nw$estimate2 <- 5692
+sh_nw$estimate <- -2843
+=======
+sh_nw
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+# sh_nw$statistic <- -4.54
+# sh_nw$n1 <- 88
+# sh_nw$n2 <- 111
+# sh_nw$estimate1 <- 3433
+# sh_nw$estimate2 <- 5427
+# sh_nw$estimate <- -1994
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_right_nh_nw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_right_nh_sw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- 3.47
+nh_sw$n1 <- 57
+nh_sw$n2 <- 55
+nh_sw$estimate1 <- 7052
+nh_sw$estimate2 <- 4360
+nh_sw$estimate <- 2691
+=======
+nh_sw
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+# nh_sw$statistic <- 2.70
+# nh_sw$n1 <- 110
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 5667
+# nh_sw$estimate2 <- 4297
+# nh_sw$estimate <- 1370
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+nw_sh <- t_test(data = mecp2_data_right_nw_sh_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_right_nw_sw_12wk, formula = Mean2~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- 1.74
+nw_sw$n1 <- 57
+nw_sw$n2 <- 60
+nw_sw$estimate1 <- 7052
+nw_sw$estimate2 <- 5692
+nw_sw$estimate <- 1360
+=======
+nw_sw
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+# nw_sw$statistic <- 0.464
+# nw_sw$n1 <- 110
+# nw_sw$n2 <- 111
+# nw_sw$estimate1 <- 5667
+# nw_sw$estimate2 <- 5427
+# nw_sw$estimate <- 240
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1, levels = c("NH", "SW",
+                                                                "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2, levels = c("SW", "NH",
+                                                                "NW"))
+right_hemi_df_mean2_12wk <- right_hemi_df
+
+pwc_right_mean2_gt <- right_hemi_df
+
+colnames(pwc_right_mean2_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_mean2_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean 2"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance"))
+
+#pwc_right_table
+```
+
+```{r fig.show='hide', echo=FALSE}
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_right_table, filename = "pwc_right_table_mecp2_mean2.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+
+
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, message=FALSE}
+#Mean 1 right hemisphere
+#Subsetting to each individual combination to get same layout as seen in
+#previous analysis
+mecp2_data_right_sh_sw_6wk <- filter(mecp2_right_6wk, Condition=="SH" | Condition=="SW")
+mecp2_data_right_sh_nh_6wk <- filter(mecp2_right_6wk, Condition=="SH" | Condition=="NH")
+mecp2_data_right_sh_nw_6wk <- filter(mecp2_right_6wk, Condition=="SH" | Condition=="NW")
+mecp2_data_right_nh_nw_6wk <- filter(mecp2_right_6wk, Condition=="NH" | Condition=="NW")
+mecp2_data_right_nh_sw_6wk <- filter(mecp2_right_6wk, Condition=="NH" | Condition=="SW")
+mecp2_data_right_nw_sh_6wk <- filter(mecp2_right_6wk, Condition=="NW" | Condition=="SH")
+mecp2_data_right_nw_sw_6wk <- filter(mecp2_right_6wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_right_sh_sw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_right_sh_nh_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- 0.395
+sh_nh$n1 <- 46
+sh_nh$n2 <- 45
+sh_nh$estimate1 <- 884
+sh_nh$estimate2 <- 822
+sh_nh$estimate <-  62.5
+=======
+sh_nh
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$statistic <- -0.713
+# sh_nh$n1 <- 88
+# sh_nh$n2 <- 110
+# sh_nh$estimate1 <- 744
+# sh_nh$estimate2 <- 814
+# sh_nh$estimate <- -70.2
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+sh_nw <- t_test(data = mecp2_data_right_sh_nw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- -1.69
+sh_nw$n1 <- 46
+sh_nw$n2 <- 51
+sh_nw$estimate1 <- 884
+sh_nw$estimate2 <- 1163
+sh_nw$estimate <- -279
+=======
+sh_nw
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+# sh_nw$statistic <- -3.22
+# sh_nw$n1 <- 88
+# sh_nw$n2 <- 111
+# sh_nw$estimate1 <- 744
+# sh_nw$estimate2 <- 1071
+# sh_nw$estimate <- -327
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_right_nh_nw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_right_nh_sw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- 0.706
+nh_sw$n1 <- 53
+nh_sw$n2 <- 45
+nh_sw$estimate1 <- 922
+nh_sw$estimate2 <- 822
+nh_sw$estimate <- 100
+=======
+nh_sw
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+# nh_sw$statistic <- 2.33
+# nh_sw$n1 <- 110
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 1046
+# nh_sw$estimate2 <- 814
+# nh_sw$estimate <- 232
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+nw_sh <- t_test(data = mecp2_data_right_nw_sh_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_right_nw_sw_6wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- -1.62
+nw_sw$n1 <- 53
+nw_sw$n2 <- 51
+nw_sw$estimate1 <- 922
+nw_sw$estimate2 <- 1163
+nw_sw$estimate <- -242
+=======
+nw_sw
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+# nw_sw$statistic <- -0.245
+# nw_sw$n1 <- 110
+# nw_sw$n2 <- 111
+# nw_sw$estimate1 <- 1046
+# nw_sw$estimate2 <- 1071
+# nw_sw$estimate <- -25.1
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1, levels = c("NH", "SW",
+                                                                "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2, levels = c("SW", "NH",
+                                                                "NW"))
+right_hemi_df_mean1_6wk <- right_hemi_df
+
+pwc_right_Mean1_gt <- right_hemi_df
+
+colnames(pwc_right_Mean1_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_Mean1_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean1"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance"))
+
+#pwc_right_table
+```
+
+```{r results='hide', fig.show='hide', echo=FALSE}
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_right_table, filename = "pwc_right_table_mecp2_mean1.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+```{r tidy=TRUE, tidy.opts=list(arrow=TRUE, indent=2), echo=FALSE, message=FALSE}
+#Mean 1 right hemisphere
+#Subsetting to each individual combination to get same layout as seen in
+#previous analysis
+mecp2_data_right_sh_sw_12wk <- filter(mecp2_right_12wk, Condition=="SH" | Condition=="SW")
+mecp2_data_right_sh_nh_12wk <- filter(mecp2_right_12wk, Condition=="SH" | Condition=="NH")
+mecp2_data_right_sh_nw_12wk <- filter(mecp2_right_12wk, Condition=="SH" | Condition=="NW")
+mecp2_data_right_nh_nw_12wk <- filter(mecp2_right_12wk, Condition=="NH" | Condition=="NW")
+mecp2_data_right_nh_sw_12wk <- filter(mecp2_right_12wk, Condition=="NH" | Condition=="SW")
+mecp2_data_right_nw_sh_12wk <- filter(mecp2_right_12wk, Condition=="NW" | Condition=="SH")
+mecp2_data_right_nw_sw_12wk <- filter(mecp2_right_12wk, Condition=="NW" | Condition=="SW")
+
+sh_sw <- t_test(data = mecp2_data_right_sh_sw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+sh_nh <- t_test(data = mecp2_data_right_sh_nh_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+sh_nh$statistic <- -2.23
+sh_nh$n1 <- 40
+sh_nh$n2 <- 55
+sh_nh$estimate1 <- 553
+sh_nh$estimate2 <- 808
+sh_nh$estimate <- -256
+=======
+sh_nh
+sh_nh$group1 <- "SH"
+sh_nh$group2 <- "NH"
+# sh_nh$statistic <- -0.713
+# sh_nh$n1 <- 88
+# sh_nh$n2 <- 110
+# sh_nh$estimate1 <- 744
+# sh_nh$estimate2 <- 814
+# sh_nh$estimate <- -70.2
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+sh_nw <- t_test(data = mecp2_data_right_sh_nw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+sh_nw$statistic <- -3.81
+sh_nw$n1 <- 40
+sh_nw$n2 <- 60
+sh_nw$estimate1 <- 553
+sh_nw$estimate2 <- 992
+sh_nw$estimate <- -440
+=======
+sh_nw
+sh_nw$group1 <- "SH"
+sh_nw$group2 <- "NW"
+# sh_nw$statistic <- -3.22
+# sh_nw$n1 <- 88
+# sh_nw$n2 <- 111
+# sh_nw$estimate1 <- 744
+# sh_nw$estimate2 <- 1071
+# sh_nw$estimate <- -327
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+nh_nw <- t_test(data = mecp2_data_right_nh_nw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nh_sw <- t_test(data = mecp2_data_right_nh_sw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+nh_sw$statistic <- 2.51
+nh_sw$n1 <- 57
+nh_sw$n2 <- 55
+nh_sw$estimate1 <- 1161
+nh_sw$estimate2 <- 808
+nh_sw$estimate <- 353
+=======
+nh_sw
+nh_sw$group1 <- "SW"
+nh_sw$group2 <- "NH"
+# nh_sw$statistic <- 2.33
+# nh_sw$n1 <- 110
+# nh_sw$n2 <- 100
+# nh_sw$estimate1 <- 1046
+# nh_sw$estimate2 <- 814
+# nh_sw$estimate <- 232
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+nw_sh <- t_test(data = mecp2_data_right_nw_sh_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+nw_sw <- t_test(data = mecp2_data_right_nw_sw_12wk, formula = Mean1~Condition,
+                p.adjust.method = "none", conf.level = 0.99, detailed = TRUE)
+
+<<<<<<< HEAD
+
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+nw_sw$statistic <- 1.20
+nw_sw$n1 <- 57
+nw_sw$n2 <- 60
+nw_sw$estimate1 <- 1161
+nw_sw$estimate2 <- 992
+nw_sw$estimate <- 169
+=======
+nw_sw
+nw_sw$group1 <- "SW"
+nw_sw$group2 <- "NW"
+# nw_sw$statistic <- -0.245
+# nw_sw$n1 <- 110
+# nw_sw$n2 <- 111
+# nw_sw$estimate1 <- 1046
+# nw_sw$estimate2 <- 1071
+# nw_sw$estimate <- -25.1
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
+
+right_hemi_df <- rbind(nh_nw,nh_sw,nw_sw, sh_sw,sh_nh, sh_nw)
+right_hemi_df <- right_hemi_df %>% add_significance("p")
+
+right_hemi_df$group1 <- factor(right_hemi_df$group1, levels = c("NH", "SW",
+                                                                "SH"))
+right_hemi_df$group2 <- factor(right_hemi_df$group2, levels = c("SW", "NH",
+                                                                "NW"))
+right_hemi_df_mean1_12wk <- right_hemi_df
+
+pwc_right_Mean1_gt <- right_hemi_df
+
+colnames(pwc_right_Mean1_gt) <- c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+                                 "Group 2", "N1", 
+                                 "N2", "Statistic","P-value", "DF", "Conf low",
+                                 "Conf high", "Method", "Alternative",
+                                 "P-value Significance")
+
+
+pwc_right_gt <- gt(pwc_right_Mean1_gt)
+pwc_right_table <- pwc_right_gt %>% tab_header(
+  title = "Pairwise T-test Analysis Mean1"
+) %>% cols_align(
+  align = "center",
+  columns = c("Estimate","Estimate1","Estimate2","Response", "Group 1",
+              "Group 2", "N1", 
+              "N2", "Statistic","P-value", "DF", "Conf low",
+              "Conf high", "Method", "Alternative",
+              "P-value Significance"))
+
+#pwc_right_table
+```
+
+```{r results='hide', fig.show='hide', echo=FALSE}
+#Saving the table as a .png file for easy insertion into PowerPoint
+# gtsave(pwc_right_table, filename = "pwc_right_table_mecp2_mean1.png",
+#        path = "Figures/Tables/", vwidth=2000)
+```
+
+
+
+
+## Plotting the heatmaps
+```{r, echo=FALSE, out.width="50%", fig.show='hold', fig.keep='all'}
+#Heatmap for Mean 2 left hemisphere
+mid <- 0
+
+
+left_heatmap <-ggplot(data = left_hemi_df_mean2_6wk, aes(x=group1, y=group2,
+                                               fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 2 Left 6 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/left_hemi_mean2_6wk.svg",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+
+#Heatmap for Mean 2 right hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df_mean2_6wk, aes(x=group1, y=group2,
+                                                 fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 2 Right 6 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/right_hemi_mean2_6wk.svg",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+```
+
+```{r echo=FALSE, out.width="50%", fig.show='hold', fig.keep='all'}
+#Heatmap for Mean 1 left hemisphere
+mid <- 0
+
+
+left_heatmap <-ggplot(data = left_hemi_df_mean1_6wk, aes(x=group1, y=group2,
+                                               fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 1 Left 6 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/left_hemi_mean1_6wk.svg",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+
+#Heatmap for Mean 1 right hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df_mean1_6wk, aes(x=group1, y=group2,
+                                                 fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 1 Right 6 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/right_hemi_mean1_6wk.svg",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+```
+
+
+```{r, echo=FALSE, out.width="50%", fig.show='hold', fig.keep='all'}
+#Heatmap for Mean 2 left hemisphere
+mid <- 0
+
+
+left_heatmap <-ggplot(data = left_hemi_df_mean2_12wk, aes(x=group1, y=group2,
+                                               fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 2 Left 12 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/left_hemi_mean2_12wk.svg",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+
+#Heatmap for Mean 2 right hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df_mean2_12wk, aes(x=group1, y=group2,
+                                                 fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 2 Right 12 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/right_hemi_mean2_12wk.svg",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+```
+
+```{r echo=FALSE, out.width="50%", fig.show='hold', fig.keep='all'}
+#Heatmap for Mean 1 left hemisphere
+mid <- 0
+
+
+left_heatmap <-ggplot(data = left_hemi_df_mean1_12wk, aes(x=group1, y=group2,
+                                               fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 1 Left 12 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/left_hemi_mean1_12wk.svg",
+       plot     = print(left_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+
+
+#Heatmap for Mean 1 right hemisphere
+mid <- 0
+
+right_heatmap <-ggplot(data = right_hemi_df_mean1_12wk, aes(x=group1, y=group2,
+                                                 fill=estimate))+
+  geom_tile()+
+<<<<<<< HEAD
+  theme(plot.title = element_text(size = 30, face = "plain", hjust = 0.5),
+=======
+  theme(plot.title = element_text(size = 40, face = "plain", hjust = 0.5),
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 30, face = "plain", angle = 90, 
+                                   hjust = 0.5),
+        axis.text.x = element_text(size = 30, face = "plain"),
+        legend.title = element_blank(),
+<<<<<<< HEAD
+        legend.key.height = unit(40, units = "pt"))+
+=======
+        legend.key.height = unit(60, units = "pt"))+
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+  ggtitle("Mean 1 Right 12 Week")+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = mid,
+                       mid = "white")+
+  xlab("")+
+  ylab("")+
+  coord_equal()+
+  geom_text(aes(label=p.signif))
+
+#Now saving the heat map
+ggsave(filename = "~/Documents/PhD Program/Hong Lab/Projects/Krishnan-lab-Analysis/Figures/Mecp2_figures/right_hemi_mean1_12wk.svg",
+       plot     = print(right_heatmap, newpage = FALSE),
+       device   = "svg", dpi=300,
+       width    = 32, height = 32,
+       units    = "cm")
+```
+
+
+
+## Overall Conclusion
+<<<<<<< HEAD
+It appears that the MECP2 data is different from our PNN data. We see as Keerthi predicited that we can't really see anything at 6 weeks. We can definitely see statistically significant differences in the 12 weeks data. The differences in means are negative while the PNN data had differences in means that were positive. Our results between Mean 1 and Mean 2 are consistent. It appears that our right hemisphere has statistically significant differences while the left hemisphere does not except for the SH-SW condition. Maybe this is indication of asymmetry that Keerthi mentioned during the meeting? Not sure. 
+=======
+It appears that the MECP2 data is very different compared to our PNN data. We have very large negative differences when looking at the MECP2 data compared to the mainly positive differences we were seeing in the PNN data. In addition, the range of values for the MECP2 data is much larger than that for the PNN data. It appears we have more signal in the Mean 2 (based on the range of the scale) than Mean 1. The left and right hemispheres do have similar patterns to them for Mean 2 behavior. Mean 1 behavior is more divergent between the hemispheres. It appears that the right hemisphere allows us to see more statistically significant differences between conditions and mean intensity vs. the left hemisphere. This might indicate that their is some kind of asymmetry (I remember Dr. Krishnan asking about this. Not sure if this is what she was meaning when she was talking about hemisphere asymmetry). I need more biological information about PNNs vs. MECP2 to understand what these results mean in a biological context.
+>>>>>>> e19d9e8fb285888eb7b5430b0f6abe8db4718db9
+
