@@ -14,11 +14,18 @@ knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/
 
 ## Step 1: Load needed packages and setting various options
 ```{r loading packages}
+suppressMessages(library(circlize))
+suppressMessages(library(ComplexHeatmap))
+suppressMessages(library(cowplot))
 suppressMessages(library(ggplot2))
 suppressMessages(library(ggpubr))
 suppressMessages(library(ggsignif))
+suppressMessages(library(gplots))
+suppressMessages(library(grid))
 suppressMessages(library(gt))
+suppressMessages(library(gtable))
 suppressMessages(library(ICC))
+suppressMessages(library(matrixcalc))
 suppressMessages(library(mclust))
 suppressMessages(library(rstatix))
 suppressMessages(library(tidyverse))
@@ -29,7 +36,7 @@ suppressMessages(library(webshot2))
 ```{r loading data}
 chs_rm <- "n"
 gmm_n <- 2
-using_mean1 <- TRUE
+using_mean1 <- FALSE
 
 pnn_data <- read.csv("Data/111722_pnn_histogram_data/111722_pnn_histogram_data_complete.csv", sep = ",")
 meta_data <- pnn_data[1:10, 1:2981]
@@ -309,27 +316,124 @@ fp_table <- fp_table %>%
 gtsave(fp_table, path = "Outputs/pnn_analysis/p_value_analysis/", filename = "p_value_analysis.png")
 ```
 
+
+
+## ComplexHeatmap
+```{r complex heatmap}
+test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"), c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5")))
+
+comparisons <- list()
+my_estimates <- list()
+my_estimates_low <- list()
+my_estimates_high <- list()
+my_estimates_low_mod <- list()
+my_sigs <- list()
+my_t_tests <- list()
+plots <- list()
+
+for (c in colnames(test_mat)) {
+  for (r in rownames(test_mat)) {
+    comparisons[[paste0(r, "_", c)]] <- paste0(r, "_", c)
+  }
+}
+
+for (s in unique(icc_df$subregion)) {
+  current_df <- filter(icc_df, subregion == s)
+  for (c in comparisons) {
+    cond_x <- strsplit(c, "_")
+    cond_y <- cond_x[[1]][2]
+    cond_x <- cond_x[[1]][1]
+    current_df_sub <- filter(current_df, condition == cond_x | condition == cond_y)
+    if (length(table(current_df_sub$condition)) < 2) {
+      current_comp <- c()
+      current_comp$estimate <- NA
+      current_comp$p.adj.signif <- ""
+      my_estimates[[paste0(cond_x, cond_y)]] <- current_comp$estimate
+      my_sigs[[paste0(cond_x, cond_y)]] <- current_comp$p.adj.signif
+      my_t_tests[[paste0(cond_x, "_", cond_y)]] <- c(0, 0, 0, "mean_2", names(table(current_df_sub$condition)), names(table(current_df_sub$condition)), unname(table(current_df_sub$condition)), unname(table(current_df_sub$condition)), 0, 1, 0, 0, 0, "T-test", "two.sided", 1, "ns")
+    } else {
+      current_comp <- NULL
+      current_comp <- t_test(data = current_df_sub, formula = mean_2 ~ condition, detailed = TRUE, conf.level = 0.999) %>%
+        adjust_pvalue(method = "holm") %>%
+        add_significance("p.adj")
+      my_t_tests[[paste0(cond_x, "_", cond_y)]] <- current_comp
+      my_estimates[[paste0(cond_x, "_", cond_y)]] <- current_comp$estimate
+      my_sigs[[paste0(cond_x, "_", cond_y)]] <- current_comp$p.adj.signif
+    }
+  }
+
+  estimates_mat <- do.call("cbind", my_estimates)
+  sigs_mat <- do.call("cbind", my_sigs)
+  dim(estimates_mat) <- c(6, 6)
+  dim(sigs_mat) <- c(6, 6)
+  dimnames(estimates_mat) <- list(rownames(test_mat), colnames(test_mat))
+  dimnames(sigs_mat) <- list(rownames(test_mat), colnames(test_mat))
+  lower_estimates <- lower.triangle(estimates_mat)
+  upper_estimates <- upper.triangle(estimates_mat)
+  lower_estimates <- lower_estimates * -1
+  lower_estimates <- apply(lower_estimates, c(1, 2), as.numeric)
+  indicies_to_rep <- which(lower_estimates == 0.000, arr.ind = TRUE)
+  indices_to_use_in_upper <- which(upper_estimates != 0.000, arr.ind = TRUE)
+  lower_estimates[indicies_to_rep] <- upper_estimates[indices_to_use_in_upper]
+
+  if (s == "MOs") {
+    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), na_col = "white", row_names_gp = gpar(fontsize = 7, fontface = "bold"), column_names_gp = gpar(fontsize = 7, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
+      grid.text(sprintf("%s", sigs_mat[i, j]), x, y, gp = gpar(fontsize = 10))
+    }, rect_gp = gpar(color = "black"))
+  } else {
+    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), row_names_gp = gpar(fontsize = 7, fontface = "bold"), na_col = "white", column_names_gp = gpar(fontsize = 7, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
+      grid.text(sprintf("%s", sigs_mat[i, j]), x, y, gp = gpar(fontsize = 10))
+    }, rect_gp = gpar(color = "black"))
+  }
+
+
+
+
+  png(file = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/subregion_", s, "_complex_heatmap.png"), units = "in", width = 5, height = 0.3937 * 6 + 0.7423, res = 600)
+  p1 <- draw(p1, height = unit(1, "cm") * 6)
+  draw(p1, height = unit(1, "cm") * 6)
+  dev.off()
+
+  p1 <- grid.grabExpr(draw(p1))
+  plots[[s]] <- p1
+}
+combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO")
+save_plot(filename = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/combo_plot_complexheatmap.png", plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.618, bg = "white")
+```
+
+
 ## Step 5: T-test by subregion
 ### Using mean_1 of 2 cluster model we get only the MOs subregion that appears to exhibit non statsitically significant differences across a decent number of conditions.
 ### Using a 1 cluster model we get 
 ```{r t-test analysis}
 t_tests <- list()
 heatmaps <- list()
+heatmaps2 <- list()
 returns <- list()
+
 
 if (gmm_n == 2 & chs_rm == "n" & using_mean1 == FALSE) {
   for (s in unique(icc_df$subregion)) {
     icc_df_sub <- filter(icc_df, subregion == s)
-    group_variance <- fligner.test(mean_2 ~ condition, data = icc_df_sub)
     test <- t_test(
       data = icc_df_sub, formula = mean_2 ~ condition,
       p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
     )
-    
+
+    # test$group1 <- factor(test$group1, levels = c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"))
+    # test$group2 <- factor(test$group2, levels = c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"))
+
+    for (c in unique(icc_df_sub$condition)) {
+      test <- rbind(test, c(0, 0, 0, "mean_2", c, c, 0, 0, 0, 0, 0, 0, 0, "T-test", "two.sided", 1, "ns"))
+    }
+
+    test[c(1, 2, 3, 7, 8:13, 16)] <- lapply(test[c(1, 2, 3, 7, 8:13, 16)], as.numeric)
+
+
     # Heatmap
     mid <- 0
-    heatmap <- ggplot(data = test, aes(
-      x = group2, y = group1,
+    heatmap1 <- ggplot(data = test, aes(
+      x = group1, y = group2,
       fill = estimate
     )) +
       geom_tile() +
@@ -337,30 +441,41 @@ if (gmm_n == 2 & chs_rm == "n" & using_mean1 == FALSE) {
         plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
         panel.background = element_blank(),
         axis.text.y = element_text(
-          size = 8, face = "plain", angle = 90,
+          size = 7, face = "bold", angle = 90,
           hjust = 0.5
         ),
-        axis.text.x = element_text(size = 8, face = "plain"),
+        axis.text.x = element_text(size = 7, face = "bold"),
         legend.key.height = unit(20, units = "pt")
       ) +
       ggtitle(paste(s, "| Mean 2")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means (y-x)") +
+      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means\n(x-y)") +
       xlab("") +
       ylab("") +
       coord_equal() +
       geom_text(aes(label = p.adj.signif))
 
+    heatmap2 <- heatmap1 + coord_flip()
+
+
+
     ggsave(
-      plot = print(heatmap), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/", s, "_mean_2.png"),
+      plot = print(heatmap1), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/", s, "_mean_2_bottom.png"),
+      device = "png", width = 6, height = 6, units = "in", dpi = 600
+    )
+
+    ggsave(
+      plot = print(heatmap2), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/", s, "_mean_2_top.png"),
       device = "png", width = 6, height = 6, units = "in", dpi = 600
     )
 
     t_tests[[s]] <- test
-    heatmaps[[s]] <- heatmap
+    heatmaps[[paste0(s, "_bottom")]] <- heatmap1
+    heatmaps2[[paste0(s, "_top")]] <- heatmap2
     returns[[1]] <- t_tests
     returns[[2]] <- heatmaps
-    returns[[3]] <- group_variance
   }
+
+
   figure <- ggarrange(
     plotlist = heatmaps, ncol = 5,
     nrow = 5,
@@ -393,10 +508,10 @@ if (gmm_n == 2 & chs_rm == "n" & using_mean1 == FALSE) {
         plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
         panel.background = element_blank(),
         axis.text.y = element_text(
-          size = 8, face = "plain", angle = 90,
+          size = 7, face = "bold", angle = 90,
           hjust = 0.5
         ),
-        axis.text.x = element_text(size = 8, face = "plain"),
+        axis.text.x = element_text(size = 7, face = "bold"),
         legend.key.height = unit(20, units = "pt")
       ) +
       ggtitle(paste(s, "| Mean 2 | Ch. 1-9 Rm")) +
@@ -656,41 +771,4 @@ if (gmm_n == 2 & chs_rm == "n" & using_mean1 == FALSE) {
 
   ggsave(path = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_1/chs_removed/", filename = "mean_1_2_cluster_gmm_combo_plot_chs_1_9_removed.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
 }
-```
-
-
-```{r arranging heatmap results for powerpoint}
-figure <- ggarrange(
-  plotlist = heatmaps, ncol = 5,
-  nrow = 5,
-  align = "hv",
-  common.legend = TRUE,
-  legend = "right",
-  labels = "AUTO"
-)
-
-annotated_figure <- annotate_figure(p = figure, top = text_grob("2 Cluster GMM | Mean 1", face = "bold", size = 18))
-
-ggsave(path = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_1/no_chs_removed/", filename = "mean_1_combo_plot_groups_split.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-```
-
-
-```{r arranging density results for powerpoint}
-set.seed(123)
-
-density_files <- list.files(path = "Outputs/pnn_analysis/density_plots/png/", pattern = "*_one_cluster.png")
-
-
-figure <- ggarrange(
-  plotlist = heatmaps, ncol = 5,
-  nrow = 5,
-  align = "hv",
-  common.legend = TRUE,
-  legend = "right",
-  labels = "AUTO"
-)
-
-annotated_figure <- annotate_figure(p = figure, top = text_grob("1 Cluster GMM Density", face = "bold", size = 18))
-
-ggsave(path = "Outputs/pnn_analysis/heatmaps/o", filename = "_combo_plot.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
 ```
