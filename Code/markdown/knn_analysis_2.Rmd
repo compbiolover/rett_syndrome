@@ -7,10 +7,10 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/krishnan_analysis/")
+knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")
 ```
 
-## Verifying method with new data
+## Loading packages
 ```{r loading needed packages}
 suppressMessages(library(caret))
 suppressMessages(library(class))
@@ -20,9 +20,11 @@ suppressMessages(library(ggforce))
 suppressMessages(library(ggsignif))
 suppressMessages(library(rstatix))
 suppressMessages(library(readxl))
+suppressMessages(library(scales))
 suppressMessages(library(tidyverse))
 ```
 
+## Loading data
 ```{r loading data}
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -30,6 +32,7 @@ sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
 sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
 ```
 
+## Cleaning data
 ```{r data cleaning}
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -40,8 +43,14 @@ naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
 naive_df_het$condition <- rep("HET", nrow(naive_df_het))
 sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
 sur_df_het$condition <- rep("HET", nrow(sur_df_het))
+
+merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 ```
 
+
+## Cell count plot
 ```{r cell count plot}
 merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
 merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
@@ -63,16 +72,73 @@ p1 <- ggplot(data = merged_df, aes(x = condition_spec, fill = mecp2_p)) +
 p1
 ```
 
+### Saving cell count plot
 ```{r saving cell count plot}
 ggsave(
-  filename = "Figures/knn_analysis/condition_vs_cell_count.svg",
+  filename = "Figures/knn_analysis/condition_vs_cell_count.png",
   plot = print(p1, newpage = FALSE),
-  device = "svg", dpi = 600,
+  device = "png", dpi = 600,
   width = 7.5, height = 7.5,
   units = "in"
 )
 ```
 
+
+```{r each image as plot}
+img_counts <- merged_df %>% count(image)
+
+merged_df$image <- gsub(merged_df$image, pattern = "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23", replacement = "NH_126_z13_23")
+merged_df$image <- gsub(merged_df$image, pattern = "z1-z10_MAX_16-bit_SW-RW9-1.3-Map128_561-60_G150_E100", replacement = "SW_128_z1_10")
+merged_df$image <- gsub(merged_df$image, pattern = "z11-z20_NW-RW10-2.2-Map128_MergedMC", replacement = "NW_128_z11_20")
+merged_df$image <- gsub(merged_df$image, pattern = "z12-z21_SW-LW10-2.1-Map128_MergedMC", replacement = "SW_128_z12_21")
+merged_df$image <- gsub(merged_df$image, pattern = "z13-23_MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100", replacement = "NH_126_z13_23")
+merged_df$image <- gsub(merged_df$image, pattern = "z15-z24_SH-RW10-2.2-Map127_MergedMC", replacement = "SH_127_z15_24")
+merged_df$image <- gsub(merged_df$image, pattern = "z16-z25_MAX_16-bit_NH-RW9-1.2-Map128_561-60_G150_E100", replacement = "NH_128_z16_25")
+merged_df$image <- gsub(merged_df$image, pattern = "z19-z28_SH-LW10-2.2-Map128_MergedMC", replacement = "SH_128_z19_28")
+merged_df$image <- gsub(merged_df$image, pattern = "z23-z32_SH-LW10-1.2-Map128_MergedMC", replacement = "SH_128_z23_32")
+merged_df$image <- gsub(merged_df$image, pattern = "z29-z38_SH-RW10-1.2-Map127_MergedMC", replacement = "SH_127_z29_38")
+merged_df$image <- gsub(merged_df$image, pattern = "z3-z12_MAX_16-bit_SW-LW9-3.2-Map128_561-60_G150_E100", replacement = "SW_128_z3_12")
+merged_df$image <- gsub(merged_df$image, pattern = "z31-z40_MAX_16-bit_NH-LW8-1.2-Map127_561-60_G150_E100", replacement = "NH_127_z31_40")
+merged_df$image <- gsub(merged_df$image, pattern = "z31-z40_NW-LW9-1.2-Map128_MergedMC", replacement = "NW_128_z31_40")
+merged_df$image <- gsub(merged_df$image, pattern = "z41-z50_SW-RW9-1.2-Map128_MergedMC", replacement = "SW_128_z41_50")
+merged_df$image <- gsub(merged_df$image, pattern = "z5-z14_NW-RW10-2.3-Map128_MergedMC", replacement = "NW_128_z5_14")
+merged_df$image <- gsub(merged_df$image, pattern = "z5-z14_NW-RW10-2.3-Map128_MergedMC", replacement = "NW_128_z5_14")
+merged_df$image <- gsub(merged_df$image, pattern = "z6-z15_NW-LW9-1.4-Map128_MergedMC", replacement = "NW_128_z6_15")
+merged_df$image <- gsub(merged_df$image, pattern = "z8-z17_MAX_16-bit_NH-RW9-1.4-Map128_561-60_G150_E100z8-z17", replacement = "NH_128_z8_17")
+merged_df$image <- gsub(merged_df$image, pattern = "z16-z25_MAX_16-bit_NH-RW9-1.2-Map128_561-60_G150_E100", replacement = "NH_128_z16_25")
+
+
+
+p1 <- merged_df %>%
+  group_by(image) %>%
+  ggplot(aes(x = x, y = y, fill = condition_spec, color = condition_spec, shape = mecp2_p)) +
+  geom_point() +
+  theme(
+    panel.background = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold"),
+    panel.spacing = unit(5, "mm")
+  ) +
+  ggtitle("Images") +
+  xlab("X (coordinate)") +
+  ylab("Y (coordinate)") +
+  scale_fill_discrete(name = "Condition") +
+  scale_color_discrete(name = "Condition") +
+  scale_shape_discrete(name = "MECP2\nStatus") +
+  facet_grid(. ~ image, scales = "free") +
+  scale_y_continuous(expand = c(0.01, 0.01), limits = c(0, 400)) +
+  scale_x_continuous(expand = c(0.03, 0.03))
+
+p1
+```
+
+```{r saving spatial plot}
+ggsave(filename = "spatial_plot.png", plot = p1, units = "in", width = 24, height = 13.5, dpi = 600, path = "Outputs/knn_analysis/plots/", device = "png")
+```
+
+
+
+## KNN analysis 
 ```{r knn functions}
 nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, intensity_df = my_x) {
   # Check the number of observations is the same
@@ -106,16 +172,15 @@ nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, in
   }
 
   if (use_intensity == TRUE) {
-    distances <- distances / intensity_df[neighbor_ind, ]$mean
-    # Get all P annotated cells and get their mean intensity
-    p_cells <- intensity_df
-    p_cells <- filter(intensity_df, mecp2_p == "P")
-    p_cell_mean <- mean(p_cells$mean)
-    my_neighbors <- intensity_df[neighbor_ind, ]
-    ifelse(my_neighbors$mean > p_cell_mean, add_p_score <- 10, add_p_score <- 0)
+    intensity_info <- intensity_df
+    intensity_info <- intensity_info[neighbor_ind, ]
+    distances_updated <- distances * intensity_info$mean
+    distances_updated <- rescale(distances_updated, to = c(0, 1))
+    additional_score <- mean(distances_updated)
+    ret <- list(neighbor_ind, distances, additional_score, distances_updated)
+  } else {
+    ret <- list(neighbor_ind, distances)
   }
-
-  ret <- list(neighbor_ind, distances, add_p_score)
   return(ret)
 }
 
@@ -132,6 +197,7 @@ euclidean_distance <- function(a, b) {
 ```{r knn analysis with 1 neighbor}
 p_score <- 0
 n_score <- 0
+using_intensity <- TRUE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -163,29 +229,33 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance)[[2]]
-    my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance)[[3]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    if (using_intensity == TRUE) {
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+    }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
     if (nn_status[1, ] == "P") {
       current_img[r, "knn_1_label"] <- 1
       p_score <- p_score + 1
-      p_score <- p_score + my_add_p_score
+      # p_score <- p_score + my_add_p_score
+      p_score <- (nn_status$mecp2_p == "P") / my_add_p_score
     } else {
       current_img[r, "knn_1_label"] <- 0
       n_score <- n_score + 1
     }
   }
-  write.csv(current_img, paste0("Outputs/knn_analysis/img_knn_1_", i, "_df_16_bit.csv"))
-  write.csv(p_score, paste0("Outputs/knn_analysis/img_knn_1_", i, "_df_p_score_16_bit.csv"))
-  write.csv(n_score, paste0("Outputs/knn_analysis/img_knn_1_", i, "_df_n_score_16_bit.csv"))
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_1_", i, "_df_16_bit.csv"))
+  write.csv(p_score, paste0("Outputs/knn_analysis/data/img_knn_1_", i, "_df_p_score_16_bit.csv"))
+  write.csv(n_score, paste0("Outputs/knn_analysis/data/img_knn_1_", i, "_df_n_score_16_bit.csv"))
 }
 
 all_dfs <- vector(mode = "list", length = 15)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/img_knn_1_", i, "_df_16_bit.csv"))
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_knn_1_", i, "_df_16_bit.csv"))
   all_dfs[[i]] <- current_df
 }
 
@@ -193,7 +263,25 @@ knn_1_df <- bind_rows(all_dfs)
 
 knn_1_df$condition_spec <- factor(knn_1_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 
-p1 <- ggplot(data = knn_1_df, aes(x = condition_spec, y = knn_1_label, fill = mecp2_p)) +
+# T-tests
+knn_1_df$p_num <- knn_1_df$mecp2_p
+knn_1_df$p_num <- gsub(x = knn_1_df$p_num, replacement = 1, pattern = "P")
+knn_1_df$p_num <- gsub(x = knn_1_df$p_num, replacement = 0, pattern = "N")
+knn_1_df$p_num <- as.numeric(knn_1_df$p_num)
+knn_1_df$knn_1_label <- as.numeric(knn_1_df$knn_1_label)
+
+# T-test by condition comparing N vs P MECP2 status within condition
+status_v_score <- knn_1_df %>%
+  group_by(condition_spec) %>%
+  t_test(data = ., knn_1_label ~ p_num, detailed = TRUE) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance("p.adj")
+
+# T-test comparing conditions to scoring label
+cond_v_score <- t_test(data = knn_1_df, knn_1_label ~ condition_spec, p.adjust.method = "holm", detailed = TRUE)
+
+# Adding p-value to plot
+p0 <- ggplot(data = knn_1_df, aes(x = condition_spec, y = knn_1_label, fill = mecp2_p)) +
   geom_violin(trim = FALSE, scale = "area") +
   geom_jitter(position = position_jitterdodge(jitter.width = 0.2)) +
   theme(
@@ -205,31 +293,23 @@ p1 <- ggplot(data = knn_1_df, aes(x = condition_spec, y = knn_1_label, fill = me
   ) +
   xlab("Condition") +
   ylab("1NN score ") +
-  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
+  geom_signif(y_position = c(1.8, 1.8, 1.8, 1.8), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "ns", "*", "ns"))
+
+p0
 
 ggsave(
-  plot = p1, filename = "Figures/knn_analysis/knn_1_fig_jitter_doge.png",
+  plot = p0, filename = "Outputs/knn_analysis/plots/knn_analysis/knn_1.png",
   device = "png", dpi = 600,
   width = 7.5, height = 7.5,
   units = "in"
 )
-
-# T-tests for the different conditions
-knn_1_df$p_num <- knn_1_df$mecp2_p
-knn_1_df$p_num <- gsub(x = knn_1_df$p_num, replacement = 1, pattern = "P")
-knn_1_df$p_num <- gsub(x = knn_1_df$p_num, replacement = 0, pattern = "N")
-knn_1_df$p_num <- as.numeric(knn_1_df$p_num)
-knn_1_df$knn_1_label <- as.numeric(knn_1_df$knn_1_label)
-t.test(knn_1_df$p_num, y = knn_1_df$knn_1_label)
-knn_1_df %>%
-  group_by(condition_spec) %>%
-  do(tidy(t.test(data = ., knn_1_label ~ p_num)))
 ```
 
 ```{r knn analysis with 3 neighbors}
 p_score <- 0
 n_score <- 0
-
+using_intensity <- TRUE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -261,22 +341,29 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance)[[2]]
-    my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance)[[3]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    if (using_intensity == TRUE) {
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+    }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
-    current_img[r, "knn_3_label"] <- sum((nn_status$mecp2_p == "P"), my_add_p_score)/ 3
+    if (using_intensity == TRUE) {
+      current_img[r, "knn_3_label"] <- (sum((nn_status$mecp2_p == "P")) / 3) / my_add_p_score
+    } else {
+      current_img[r, "knn_3_label"] <- sum((nn_status$mecp2_p == "P")) / 3
+    }
   }
-  write.csv(current_img, paste0("Outputs/knn_analysis/img_knn_3_", i, "_df_16_bit.csv"))
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_3_", i, "_df_16_bit_intensity.csv"))
 }
 
 
 
 all_dfs <- vector(mode = "list", length = 15)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/img_knn_3_", i, "_df_16_bit.csv"))
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_knn_3_", i, "_df_16_bit_intensity.csv"))
   all_dfs[[i]] <- current_df
 }
 
@@ -284,6 +371,24 @@ knn_3_df <- bind_rows(all_dfs)
 
 knn_3_df$condition_spec <- factor(knn_3_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 
+# T-tests
+knn_3_df$p_num <- knn_3_df$mecp2_p
+knn_3_df$p_num <- gsub(x = knn_3_df$p_num, replacement = 1, pattern = "P")
+knn_3_df$p_num <- gsub(x = knn_3_df$p_num, replacement = 0, pattern = "N")
+knn_3_df$p_num <- as.numeric(knn_3_df$p_num)
+knn_3_df$knn_3_label <- as.numeric(knn_3_df$knn_3_label)
+
+# T-test by condition comparing N vs P MECP2 status within condition
+status_v_score <- knn_3_df %>%
+  group_by(condition_spec) %>%
+  t_test(data = ., knn_3_label ~ p_num, detailed = TRUE) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance("p.adj")
+
+# T-test comparing conditions to scoring label
+cond_v_score <- t_test(data = knn_3_df, knn_3_label ~ condition_spec, p.adjust.method = "holm", detailed = TRUE)
+
+# Adding p-value to plot
 p1 <- ggplot(data = knn_3_df, aes(x = condition_spec, y = knn_3_label, fill = mecp2_p)) +
   geom_violin(trim = FALSE, scale = "area") +
   geom_jitter(position = position_jitterdodge(jitter.width = 0.2)) +
@@ -296,31 +401,23 @@ p1 <- ggplot(data = knn_3_df, aes(x = condition_spec, y = knn_3_label, fill = me
   ) +
   xlab("Condition") +
   ylab("3NN score ") +
-  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
+  geom_signif(y_position = c(4.0, 4.0, 4.0, 4.0), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "ns", "**", "ns"))
+
+p1
 
 ggsave(
-  plot = p1, filename = "Figures/knn_analysis/knn_3_fig_jitter_doge.png",
+  plot = p1, filename = "Outputs/knn_analysis/plots/knn_analysis/knn_3.png",
   device = "png", dpi = 600,
   width = 7.5, height = 7.5,
   units = "in"
 )
-
-# T-tests for the different conditions
-knn_3_df$p_num <- knn_3_df$mecp2_p
-knn_3_df$p_num <- gsub(x = knn_3_df$p_num, replacement = 1, pattern = "P")
-knn_3_df$p_num <- gsub(x = knn_3_df$p_num, replacement = 0, pattern = "N")
-knn_3_df$p_num <- as.numeric(knn_3_df$p_num)
-knn_3_df$knn_3_label <- as.numeric(knn_3_df$knn_3_label)
-t.test(knn_3_df$p_num, y = knn_3_df$knn_3_label)
-knn_3_df %>%
-  group_by(condition_spec) %>%
-  do(tidy(t.test(data = ., knn_3_label ~ p_num)))
 ```
 
 ```{r knn analysis with 5 neighbors}
 p_score <- 0
 n_score <- 0
-
+using_intensity <- TRUE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -352,22 +449,27 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance)[[2]]
-    my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance)[[3]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    if (using_intensity == TRUE) {
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+    }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
-    current_img[r, "knn_5_label"] <- sum((nn_status$mecp2_p == "P"), my_add_p_score)/ 5
+    if (using_intensity == TRUE) {
+      current_img[r, "knn_5_label"] <- (sum((nn_status$mecp2_p == "P")) / 5) / my_add_p_score
+    } else {
+      current_img[r, "knn_5_label"] <- sum((nn_status$mecp2_p == "P")) / 5
+    }
   }
-  write.csv(current_img, paste0("Outputs/knn_analysis/img_knn_5_", i, "_df_16_bit.csv"))
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_5_", i, "_df_16_bit_intensity.csv"))
 }
-
-
 
 all_dfs <- vector(mode = "list", length = 15)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/img_knn_5_", i, "_df_16_bit.csv"))
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_knn_5_", i, "_df_16_bit_intensity.csv"))
   all_dfs[[i]] <- current_df
 }
 
@@ -375,7 +477,25 @@ knn_5_df <- bind_rows(all_dfs)
 
 knn_5_df$condition_spec <- factor(knn_5_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 
-p1 <- ggplot(data = knn_5_df, aes(x = condition_spec, y = knn_5_label, fill = mecp2_p)) +
+# T-tests
+knn_5_df$p_num <- knn_5_df$mecp2_p
+knn_5_df$p_num <- gsub(x = knn_5_df$p_num, replacement = 1, pattern = "P")
+knn_5_df$p_num <- gsub(x = knn_5_df$p_num, replacement = 0, pattern = "N")
+knn_5_df$p_num <- as.numeric(knn_5_df$p_num)
+knn_5_df$knn_5_label <- as.numeric(knn_5_df$knn_5_label)
+
+# T-test by condition comparing N vs P MECP2 status within condition
+status_v_score <- knn_5_df %>%
+  group_by(condition_spec) %>%
+  t_test(data = ., knn_5_label ~ p_num, detailed = TRUE) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance("p.adj")
+
+# T-test comparing conditions to scoring label
+cond_v_score <- t_test(data = knn_5_df, knn_5_label ~ condition_spec, p.adjust.method = "holm", detailed = TRUE)
+
+# Adding p-value to plot
+p2 <- ggplot(data = knn_5_df, aes(x = condition_spec, y = knn_5_label, fill = mecp2_p)) +
   geom_violin(trim = FALSE, scale = "area") +
   geom_jitter(position = position_jitterdodge(jitter.width = 0.2)) +
   theme(
@@ -387,31 +507,22 @@ p1 <- ggplot(data = knn_5_df, aes(x = condition_spec, y = knn_5_label, fill = me
   ) +
   xlab("Condition") +
   ylab("5NN score ") +
-  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
+  geom_signif(y_position = c(5.5, 5.5, 5.5, 5.5), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "ns", "ns", "ns"))
+
+p2
 
 ggsave(
-  plot = p1, filename = "Figures/knn_analysis/knn_5_fig_jitter_doge.png",
+  plot = p2, filename = "Outputs/knn_analysis/plots/knn_analysis/knn_5.png",
   device = "png", dpi = 600,
   width = 7.5, height = 7.5,
   units = "in"
 )
-
-# T-tests for the different conditions
-knn_5_df$p_num <- knn_5_df$mecp2_p
-knn_5_df$p_num <- gsub(x = knn_5_df$p_num, replacement = 1, pattern = "P")
-knn_5_df$p_num <- gsub(x = knn_5_df$p_num, replacement = 0, pattern = "N")
-knn_5_df$p_num <- as.numeric(knn_5_df$p_num)
-knn_5_df$knn_5_label <- as.numeric(knn_5_df$knn_5_label)
-t.test(knn_5_df$p_num, y = knn_5_df$knn_5_label)
-knn_5_df %>%
-  group_by(condition_spec) %>%
-  do(tidy(t.test(data = ., knn_5_label ~ p_num)))
 ```
-
 ```{r knn analysis with 21 neighbors}
 p_score <- 0
 n_score <- 0
-
+using_intensity <- TRUE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -443,22 +554,29 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance)[[2]]
-    my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance)[[3]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    if (using_intensity == TRUE) {
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+    }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
-    current_img[r, "knn_21_label"] <- sum((nn_status$mecp2_p == "P"), my_add_p_score)/ 21
+    if (using_intensity == TRUE) {
+      current_img[r, "knn_21_label"] <- (sum((nn_status$mecp2_p == "P")) / 21) / my_add_p_score
+    } else {
+      current_img[r, "knn_21_label"] <- sum((nn_status$mecp2_p == "P")) / 21
+    }
   }
-  write.csv(current_img, paste0("Outputs/knn_analysis/img_knn_21_", i, "_df_16_bit.csv"))
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_21_", i, "_df_16_bit_intensity.csv"))
 }
 
 
 
 all_dfs <- vector(mode = "list", length = 15)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/img_knn_21_", i, "_df_16_bit.csv"))
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_knn_21_", i, "_df_16_bit_intensity.csv"))
   all_dfs[[i]] <- current_df
 }
 
@@ -466,7 +584,25 @@ knn_21_df <- bind_rows(all_dfs)
 
 knn_21_df$condition_spec <- factor(knn_21_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 
-p1 <- ggplot(data = knn_21_df, aes(x = condition_spec, y = knn_21_label, fill = mecp2_p)) +
+# T-tests
+knn_21_df$p_num <- knn_21_df$mecp2_p
+knn_21_df$p_num <- gsub(x = knn_21_df$p_num, replacement = 1, pattern = "P")
+knn_21_df$p_num <- gsub(x = knn_21_df$p_num, replacement = 0, pattern = "N")
+knn_21_df$p_num <- as.numeric(knn_21_df$p_num)
+knn_21_df$knn_21_label <- as.numeric(knn_21_df$knn_21_label)
+
+# T-test by condition comparing N vs P MECP2 status within condition
+status_v_score <- knn_21_df %>%
+  group_by(condition_spec) %>%
+  t_test(data = ., knn_21_label ~ p_num, detailed = TRUE) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance("p.adj")
+
+# T-test comparing conditions to scoring label
+cond_v_score <- t_test(data = knn_21_df, knn_21_label ~ condition_spec, p.adjust.method = "holm", detailed = TRUE)
+
+# Adding p-value to plot
+p3 <- ggplot(data = knn_21_df, aes(x = condition_spec, y = knn_21_label, fill = mecp2_p)) +
   geom_violin(trim = FALSE, scale = "area") +
   geom_jitter(position = position_jitterdodge(jitter.width = 0.2)) +
   theme(
@@ -478,24 +614,28 @@ p1 <- ggplot(data = knn_21_df, aes(x = condition_spec, y = knn_21_label, fill = 
   ) +
   xlab("Condition") +
   ylab("21NN score ") +
-  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P")
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
+  geom_signif(y_position = c(8.5, 8.5, 8.5, 8.5), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "*", "**", "ns"))
+
+p3
 
 ggsave(
-  plot = p1, filename = "Figures/knn_analysis/knn_21_fig_jitter_doge.png",
+  plot = p3, filename = "Outputs/knn_analysis/plots/knn_analysis/knn_21.png",
   device = "png", dpi = 600,
   width = 7.5, height = 7.5,
   units = "in"
 )
-
-# T-tests for the different conditions
-knn_21_df$p_num <- knn_21_df$mecp2_p
-knn_21_df$p_num <- gsub(x = knn_21_df$p_num, replacement = 1, pattern = "P")
-knn_21_df$p_num <- gsub(x = knn_21_df$p_num, replacement = 0, pattern = "N")
-knn_21_df$p_num <- as.numeric(knn_21_df$p_num)
-knn_21_df$knn_21_label <- as.numeric(knn_21_df$knn_21_label)
-t.test(knn_21_df$p_num, y = knn_21_df$knn_21_label)
-knn_21_df %>%
-  group_by(condition_spec) %>%
-  do(tidy(t.test(data = ., knn_21_label ~ p_num)))
+```
+```{r arrange all knn plots}
+combo_plot <- ggarrange(p0, p1, p2, p3, ncol = 2, nrow = 2, labels = "AUTO", legend = "right", common.legend = TRUE)
+combo_plot <- annotate_figure(combo_plot, top = text_grob("KNN Analysis", face = "bold", size = 14))
 ```
 
+
+```{r saving combo plot}
+ggsave(
+  plot = combo_plot, filename = "knn_combo_plot.png", device = "png", width = 10,
+  height = 10, units = "in", dpi = 600, path = "Outputs/knn_analysis/plots/knn_analysis/",
+  bg = "white"
+)
+```
