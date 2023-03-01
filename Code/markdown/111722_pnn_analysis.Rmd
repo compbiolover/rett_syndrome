@@ -9,10 +9,9 @@ output: html_document
 knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/rett_syndrome/")
 ```
-
 ## Objective: Analyze cohort 111722 PNN data for collaborators
 
-## Step 1: Load needed packages and setting various options
+## Step 1: Load needed packages
 ```{r loading packages}
 suppressMessages(library(circlize))
 suppressMessages(library(ComplexHeatmap))
@@ -31,7 +30,6 @@ suppressMessages(library(rstatix))
 suppressMessages(library(tidyverse))
 suppressMessages(library(webshot2))
 ```
-
 ## Step 2: Load in data
 ```{r loading data}
 chs_rm <- "n"
@@ -66,9 +64,7 @@ if (chs_rm == "n") {
   all_data <- subset(all_data, select = c(date:author, ch_10:ch_256))
 }
 ```
-
-
-## Step 3: Mclust
+## Step 3a: Mclust
 ```{r mclust analysis}
 mods <- list()
 mods_sum <- list()
@@ -198,7 +194,7 @@ for (s in unique(all_data$subregion)) {
   mods_sum <- list()
 }
 ```
-
+## Step 3b: ICC DFs
 ```{r icc dataframes}
 if (gmm_n == 1 & chs_rm == "n") {
   all_files <- list.files("Outputs/pnn_analysis/density_data/one_cluster/no_chs_removed/")
@@ -242,7 +238,6 @@ if (gmm_n == 1 & chs_rm == "n") {
   icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1", "mean_2"))
 }
 ```
-
 ## Step 4: ICC Analysis
 ```{r icc analysis function}
 icc_analysis <- function(data = all_data, subset_data = FALSE, subset_var = NULL, subset_val = NULL, dependent_var = "mean_2", icc_title = "ICC Analysis", icc_filename = "table", icc_path = "Outputs/pnn_analysis/icc_data/gt_tables/") {
@@ -315,10 +310,7 @@ fp_table <- fp_table %>%
 
 gtsave(fp_table, path = "Outputs/pnn_analysis/p_value_analysis/", filename = "p_value_analysis.png")
 ```
-
-
-
-## ComplexHeatmap
+## Step 5: T-tests with ComplexHeatmap
 ```{r complex heatmap}
 test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"), c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5")))
 
@@ -377,11 +369,11 @@ for (s in unique(icc_df$subregion)) {
   lower_estimates[indicies_to_rep] <- upper_estimates[indices_to_use_in_upper]
 
   if (s == "MOs") {
-    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), na_col = "white", row_names_gp = gpar(fontsize = 7, fontface = "bold"), column_names_gp = gpar(fontsize = 7, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
+    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), na_col = "white", row_names_gp = gpar(fontsize = 5, fontface = "bold"), column_names_gp = gpar(fontsize = 5, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
       grid.text(sprintf("%s", sigs_mat[i, j]), x, y, gp = gpar(fontsize = 10))
     }, rect_gp = gpar(color = "black"))
   } else {
-    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), row_names_gp = gpar(fontsize = 7, fontface = "bold"), na_col = "white", column_names_gp = gpar(fontsize = 7, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
+    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), row_names_gp = gpar(fontsize = 5, fontface = "bold"), na_col = "white", column_names_gp = gpar(fontsize = 5, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
       grid.text(sprintf("%s", sigs_mat[i, j]), x, y, gp = gpar(fontsize = 10))
     }, rect_gp = gpar(color = "black"))
   }
@@ -397,378 +389,7 @@ for (s in unique(icc_df$subregion)) {
   p1 <- grid.grabExpr(draw(p1))
   plots[[s]] <- p1
 }
+
 combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO")
-save_plot(filename = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/combo_plot_complexheatmap.png", plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.618, bg = "white")
-```
-
-
-## Step 5: T-test by subregion
-### Using mean_1 of 2 cluster model we get only the MOs subregion that appears to exhibit non statsitically significant differences across a decent number of conditions.
-### Using a 1 cluster model we get 
-```{r t-test analysis}
-t_tests <- list()
-heatmaps <- list()
-heatmaps2 <- list()
-returns <- list()
-
-
-if (gmm_n == 2 & chs_rm == "n" & using_mean1 == FALSE) {
-  for (s in unique(icc_df$subregion)) {
-    icc_df_sub <- filter(icc_df, subregion == s)
-    test <- t_test(
-      data = icc_df_sub, formula = mean_2 ~ condition,
-      p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
-    )
-
-    # test$group1 <- factor(test$group1, levels = c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"))
-    # test$group2 <- factor(test$group2, levels = c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"))
-
-    for (c in unique(icc_df_sub$condition)) {
-      test <- rbind(test, c(0, 0, 0, "mean_2", c, c, 0, 0, 0, 0, 0, 0, 0, "T-test", "two.sided", 1, "ns"))
-    }
-
-    test[c(1, 2, 3, 7, 8:13, 16)] <- lapply(test[c(1, 2, 3, 7, 8:13, 16)], as.numeric)
-
-
-    # Heatmap
-    mid <- 0
-    heatmap1 <- ggplot(data = test, aes(
-      x = group1, y = group2,
-      fill = estimate
-    )) +
-      geom_tile() +
-      theme(
-        plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
-        panel.background = element_blank(),
-        axis.text.y = element_text(
-          size = 7, face = "bold", angle = 90,
-          hjust = 0.5
-        ),
-        axis.text.x = element_text(size = 7, face = "bold"),
-        legend.key.height = unit(20, units = "pt")
-      ) +
-      ggtitle(paste(s, "| Mean 2")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means\n(x-y)") +
-      xlab("") +
-      ylab("") +
-      coord_equal() +
-      geom_text(aes(label = p.adj.signif))
-
-    heatmap2 <- heatmap1 + coord_flip()
-
-
-
-    ggsave(
-      plot = print(heatmap1), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/", s, "_mean_2_bottom.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    ggsave(
-      plot = print(heatmap2), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/", s, "_mean_2_top.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    t_tests[[s]] <- test
-    heatmaps[[paste0(s, "_bottom")]] <- heatmap1
-    heatmaps2[[paste0(s, "_top")]] <- heatmap2
-    returns[[1]] <- t_tests
-    returns[[2]] <- heatmaps
-  }
-
-
-  figure <- ggarrange(
-    plotlist = heatmaps, ncol = 5,
-    nrow = 5,
-    align = "hv",
-    common.legend = TRUE,
-    legend = "right",
-    labels = "AUTO"
-  )
-
-  annotated_figure <- annotate_figure(p = figure, top = text_grob("2 Cluster GMM | Mean 2", face = "bold", size = 18))
-
-  ggsave(path = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/", filename = "mean_2_2_cluster_gmm_combo_plot.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-} else if (gmm_n == 2 & chs_rm == "y" & using_mean1 == FALSE) {
-  for (s in unique(icc_df$subregion)) {
-    icc_df_sub <- filter(icc_df, subregion == s)
-    group_variance <- fligner.test(mean_2 ~ condition, data = icc_df_sub)
-    test <- t_test(
-      data = icc_df_sub, formula = mean_2 ~ condition,
-      p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
-    )
-
-    # Heatmap
-    mid <- 0
-    heatmap <- ggplot(data = test, aes(
-      x = group2, y = group1,
-      fill = estimate
-    )) +
-      geom_tile() +
-      theme(
-        plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
-        panel.background = element_blank(),
-        axis.text.y = element_text(
-          size = 7, face = "bold", angle = 90,
-          hjust = 0.5
-        ),
-        axis.text.x = element_text(size = 7, face = "bold"),
-        legend.key.height = unit(20, units = "pt")
-      ) +
-      ggtitle(paste(s, "| Mean 2 | Ch. 1-9 Rm")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means (y-x)") +
-      xlab("") +
-      ylab("") +
-      coord_equal() +
-      geom_text(aes(label = p.adj.signif))
-
-    ggsave(
-      plot = print(heatmap), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/chs_removed/", s, "_mean_2_groups_ch_1_9_removed.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    t_tests[[s]] <- test
-    heatmaps[[s]] <- heatmap
-    returns[[1]] <- t_tests
-    returns[[2]] <- heatmaps
-    returns[[3]] <- group_variance
-  }
-  figure <- ggarrange(
-    plotlist = heatmaps, ncol = 5,
-    nrow = 5,
-    align = "hv",
-    common.legend = TRUE,
-    legend = "right",
-    labels = "AUTO"
-  )
-
-  annotated_figure <- annotate_figure(p = figure, top = text_grob("2 Cluster GMM | Mean 2 | Chs. 1-9 Removed", face = "bold", size = 18))
-
-  ggsave(path = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/chs_removed/", filename = "mean_2_2_cluster_gmm_combo_plot_chs_1_9_removed.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-} else if (gmm_n == 1 & chs_rm == "n" & using_mean1 == FALSE) {
-  for (s in unique(icc_df$subregion)) {
-    icc_df_sub <- filter(icc_df, subregion == s)
-    group_variance <- fligner.test(mean_1 ~ condition, data = icc_df_sub)
-    test <- t_test(
-      data = icc_df_sub, formula = mean_1 ~ condition,
-      p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
-    )
-
-    # Heatmap
-    mid <- 0
-    heatmap <- ggplot(data = test, aes(
-      x = group2, y = group1,
-      fill = estimate
-    )) +
-      geom_tile() +
-      theme(
-        plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
-        panel.background = element_blank(),
-        axis.text.y = element_text(
-          size = 8, face = "plain", angle = 90,
-          hjust = 0.5
-        ),
-        axis.text.x = element_text(size = 8, face = "plain"),
-        legend.key.height = unit(20, units = "pt")
-      ) +
-      ggtitle(paste(s, "| Mean 1")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means (y-x)") +
-      xlab("") +
-      ylab("") +
-      coord_equal() +
-      geom_text(aes(label = p.adj.signif))
-
-    ggsave(
-      plot = print(heatmap), filename = paste0("Outputs/pnn_analysis/heatmaps/one_cluster_gmm/no_chs_removed/", s, "_mean_1.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    t_tests[[s]] <- test
-    heatmaps[[s]] <- heatmap
-    returns[[1]] <- t_tests
-    returns[[2]] <- heatmaps
-    returns[[3]] <- group_variance
-  }
-
-  figure <- ggarrange(
-    plotlist = heatmaps, ncol = 5,
-    nrow = 5,
-    align = "hv",
-    common.legend = TRUE,
-    legend = "right",
-    labels = "AUTO"
-  )
-
-  annotated_figure <- annotate_figure(p = figure, top = text_grob("1 Cluster GMM | Mean 1", face = "bold", size = 18))
-
-  ggsave(path = "Outputs/pnn_analysis/heatmaps/one_cluster_gmm/no_chs_removed/", filename = "mean_1_1_cluster_gmm_combo_plot.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-} else if (gmm_n == 1 & chs_rm == "y" & using_mean1 == FALSE) {
-  for (s in unique(icc_df$subregion)) {
-    icc_df_sub <- filter(icc_df, subregion == s)
-    group_variance <- fligner.test(mean_1 ~ condition, data = icc_df_sub)
-    test <- t_test(
-      data = icc_df_sub, formula = mean_1 ~ condition,
-      p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
-    )
-
-    # Heatmap
-    mid <- 0
-    heatmap <- ggplot(data = test, aes(
-      x = group2, y = group1,
-      fill = estimate
-    )) +
-      geom_tile() +
-      theme(
-        plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
-        panel.background = element_blank(),
-        axis.text.y = element_text(
-          size = 8, face = "plain", angle = 90,
-          hjust = 0.5
-        ),
-        axis.text.x = element_text(size = 8, face = "plain"),
-        legend.key.height = unit(20, units = "pt")
-      ) +
-      ggtitle(paste(s, "| Mean 1 | Ch. 1-9 Rm")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means (y-x)") +
-      xlab("") +
-      ylab("") +
-      coord_equal() +
-      geom_text(aes(label = p.adj.signif))
-
-    ggsave(
-      plot = print(heatmap), filename = paste0("Outputs/pnn_analysis/heatmaps/one_cluster_gmm/chs_removed/", s, "_mean_1_ch_1_9_removed.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    t_tests[[s]] <- test
-    heatmaps[[s]] <- heatmap
-    returns[[1]] <- t_tests
-    returns[[2]] <- heatmaps
-    returns[[3]] <- group_variance
-  }
-
-  figure <- ggarrange(
-    plotlist = heatmaps, ncol = 5,
-    nrow = 5,
-    align = "hv",
-    common.legend = TRUE,
-    legend = "right",
-    labels = "AUTO"
-  )
-
-  annotated_figure <- annotate_figure(p = figure, top = text_grob("1 Cluster GMM | Mean 1 | Chs. 1-9 Removed", face = "bold", size = 18))
-
-  ggsave(path = "Outputs/pnn_analysis/heatmaps/one_cluster_gmm/chs_removed/", filename = "mean_1_1_cluster_gmm_combo_plot_chs_1_9_removed.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-} else if (gmm_n == 2 & chs_rm == "n" & using_mean1 == TRUE) {
-  for (s in unique(icc_df$subregion)) {
-    icc_df_sub <- filter(icc_df, subregion == s)
-    group_variance <- fligner.test(mean_1 ~ condition, data = icc_df_sub)
-    test <- t_test(
-      data = icc_df_sub, formula = mean_1 ~ condition,
-      p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
-    )
-
-    # Heatmap
-    mid <- 0
-    heatmap <- ggplot(data = test, aes(
-      x = group2, y = group1,
-      fill = estimate
-    )) +
-      geom_tile() +
-      theme(
-        plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
-        panel.background = element_blank(),
-        axis.text.y = element_text(
-          size = 8, face = "plain", angle = 90,
-          hjust = 0.5
-        ),
-        axis.text.x = element_text(size = 8, face = "plain"),
-        legend.key.height = unit(20, units = "pt")
-      ) +
-      ggtitle(paste(s, "| Mean 1")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means (y-x)") +
-      xlab("") +
-      ylab("") +
-      coord_equal() +
-      geom_text(aes(label = p.adj.signif))
-
-    ggsave(
-      plot = print(heatmap), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_1/no_chs_removed/", s, "_mean_1.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    t_tests[[s]] <- test
-    heatmaps[[s]] <- heatmap
-    returns[[1]] <- t_tests
-    returns[[2]] <- heatmaps
-    returns[[3]] <- group_variance
-  }
-  figure <- ggarrange(
-    plotlist = heatmaps, ncol = 5,
-    nrow = 5,
-    align = "hv",
-    common.legend = TRUE,
-    legend = "right",
-    labels = "AUTO"
-  )
-
-  annotated_figure <- annotate_figure(p = figure, top = text_grob("2 Cluster GMM | Mean 1", face = "bold", size = 18))
-
-  ggsave(path = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_1/no_chs_removed/", filename = "mean_1_2_cluster_gmm_combo_plot.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-} else if (gmm_n == 2 & chs_rm == "y" & using_mean1 == TRUE) {
-  for (s in unique(icc_df$subregion)) {
-    icc_df_sub <- filter(icc_df, subregion == s)
-    group_variance <- fligner.test(mean_1 ~ condition, data = icc_df_sub)
-    test <- t_test(
-      data = icc_df_sub, formula = mean_1 ~ condition,
-      p.adjust.method = "holm", conf.level = 0.999, detailed = TRUE
-    )
-
-    # Heatmap
-    mid <- 0
-    heatmap <- ggplot(data = test, aes(
-      x = group2, y = group1,
-      fill = estimate
-    )) +
-      geom_tile() +
-      theme(
-        plot.title = element_text(size = 12, face = "plain", hjust = 0.5),
-        panel.background = element_blank(),
-        axis.text.y = element_text(
-          size = 8, face = "plain", angle = 90,
-          hjust = 0.5
-        ),
-        axis.text.x = element_text(size = 8, face = "plain"),
-        legend.key.height = unit(20, units = "pt")
-      ) +
-      ggtitle(paste(s, "| Mean 1 | Ch. 1-9 Rm")) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red", name = "Difference in means (y-x)") +
-      xlab("") +
-      ylab("") +
-      coord_equal() +
-      geom_text(aes(label = p.adj.signif))
-
-    ggsave(
-      plot = print(heatmap), filename = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_1/chs_removed/", s, "mean_1_ch_1_9_removed.png"),
-      device = "png", width = 6, height = 6, units = "in", dpi = 600
-    )
-
-    t_tests[[s]] <- test
-    heatmaps[[s]] <- heatmap
-    returns[[1]] <- t_tests
-    returns[[2]] <- heatmaps
-    returns[[3]] <- group_variance
-  }
-  figure <- ggarrange(
-    plotlist = heatmaps, ncol = 5,
-    nrow = 5,
-    align = "hv",
-    common.legend = TRUE,
-    legend = "right",
-    labels = "AUTO"
-  )
-
-  annotated_figure <- annotate_figure(p = figure, top = text_grob("2 Cluster GMM | Mean 1 | Chs. 1-9 Removed", face = "bold", size = 18))
-
-  ggsave(path = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_1/chs_removed/", filename = "mean_1_2_cluster_gmm_combo_plot_chs_1_9_removed.png", plot = annotated_figure, device = "png", width = 20, height = 20, units = "in", dpi = 600, bg = "white")
-}
+save_plot(filename = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/combo_plot_complexheatmap.png", plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.1, bg = "white")
 ```
