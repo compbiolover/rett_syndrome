@@ -1,0 +1,401 @@
+---
+title: "111722_pnn_analysis"
+author: "Andrew Willems and Tian Hong"
+date: "2023-01-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/rett_syndrome/")
+```
+## Objective: Analyze cohort 111722 PNN data for collaborators
+
+## Step 1: Load needed packages
+```{r loading packages}
+suppressMessages(library(circlize))
+suppressMessages(library(ComplexHeatmap))
+suppressMessages(library(cowplot))
+suppressMessages(library(ggplot2))
+suppressMessages(library(ggpubr))
+suppressMessages(library(ggsignif))
+suppressMessages(library(gplots))
+suppressMessages(library(grid))
+suppressMessages(library(gt))
+suppressMessages(library(gtable))
+suppressMessages(library(ICC))
+suppressMessages(library(matrixcalc))
+suppressMessages(library(mclust))
+suppressMessages(library(rstatix))
+suppressMessages(library(tidyverse))
+suppressMessages(library(webshot2))
+```
+## Step 2: Load in data
+```{r loading data}
+chs_rm <- "n"
+gmm_n <- 2
+using_mean1 <- FALSE
+
+pnn_data <- read.csv("Data/111722_pnn_histogram_data/111722_pnn_histogram_data_complete.csv", sep = ",")
+meta_data <- pnn_data[1:10, 1:2981]
+meta_data <- t(meta_data)
+colnames(meta_data) <- meta_data[1, ]
+meta_data <- as.data.frame(meta_data)
+meta_data <- meta_data[2:2981, ]
+meta_data$author <- rownames(meta_data)[2:2981]
+rownames(meta_data) <- 1:nrow(meta_data)
+colnames(meta_data) <- c("date", "cohort", "condition", "coordinates", "hemisphere", "subregion", "rotation_x", "rotation_y", "z_position", "area", "author")
+meta_data$cohort <- gsub(pattern = "#", replacement = "", x = meta_data$cohort)
+meta_data$author <- gsub(pattern = "[0123456789]", replacement = "", x = meta_data$author)
+meta_data$author <- gsub(pattern = "LD...", replacement = "LD", x = meta_data$author)
+meta_data$author <- gsub(pattern = "JM...", replacement = "JM", x = meta_data$author)
+meta_data$author <- gsub(pattern = "RS...", replacement = "RS", x = meta_data$author)
+meta_data$author <- gsub(pattern = "LD.", replacement = "LD", x = meta_data$author)
+meta_data$author <- gsub(pattern = "JM.", replacement = "JM", x = meta_data$author)
+meta_data$author <- gsub(pattern = "RS.", replacement = "RS", x = meta_data$author)
+expr_data <- pnn_data[11:266, 2:2981]
+expr_data <- t(expr_data)
+expr_data <- as.data.frame(expr_data)
+colnames(expr_data) <- paste0("ch_", 1:ncol(expr_data))
+if (chs_rm == "n") {
+  all_data <- bind_cols(meta_data, expr_data)
+} else {
+  all_data <- bind_cols(meta_data, expr_data)
+  all_data <- subset(all_data, select = c(date:author, ch_10:ch_256))
+}
+```
+## Step 3a: Mclust
+```{r mclust analysis}
+mods <- list()
+mods_sum <- list()
+for (s in unique(all_data$subregion)) {
+  current_region <- filter(all_data, subregion == s)
+  for (c in unique(current_region$condition)) {
+    current_condition <- filter(current_region, condition == c)
+    for (h in unique(current_condition$hemisphere)) {
+      curent_sample <- filter(current_condition, hemisphere == h)
+      for (r in 1:nrow(current_sample)) {
+        mod <- densityMclust(as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)]))), G = gmm_n, plot = FALSE)
+        mods[[r]] <- mod
+        summary_mod <- summary(mod, parameters = TRUE)
+        mods_sum[[r]] <- summary_mod
+        if (gmm_n == 1 & chs_rm == "n") {
+          icc_df <- data.frame(
+            cohort = current_region[r, "cohort"],
+            condition = current_region[r, "condition"],
+            hemisphere = current_region[r, "hemisphere"],
+            subregion = current_region[r, "subregion"],
+            area = current_region[r, "area"],
+            author = current_region[r, "author"],
+            coordinates = current_region[r, "coordinates"],
+            rotation_x = current_region[r, "rotation_x"],
+            rotation_y = current_region[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/one_cluster/no_chs_removed/sample_", r, "_", s, ".csv"))
+        } else if (gmm_n == 2 & chs_rm == "n") {
+          icc_df <- data.frame(
+            cohort = current_sample[r, "cohort"],
+            condition = current_sample[r, "condition"],
+            hemisphere = current_sample[r, "hemisphere"],
+            subregion = current_sample[r, "subregion"],
+            area = current_sample[r, "area"],
+            author = current_sample[r, "author"],
+            coordinates = current_sample[r, "coordinates"],
+            rotation_x = current_sample[r, "rotation_x"],
+            rotation_y = current_sample[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            mean_2 = mod$parameters$mean[[2]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_sample[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/subregion_condition_hemisphere/sample_", r, "_", s,"_", c, "_", h, "_optimal_mod.csv"))
+        } else if (gmm_n == 2 & chs_rm == "y") {
+          icc_df <- data.frame(
+            cohort = current_region[r, "cohort"],
+            condition = current_region[r, "condition"],
+            hemisphere = current_region[r, "hemisphere"],
+            subregion = current_region[r, "subregion"],
+            area = current_region[r, "area"],
+            author = current_region[r, "author"],
+            coordinates = current_region[r, "coordinates"],
+            rotation_x = current_region[r, "rotation_x"],
+            rotation_y = current_region[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            mean_2 = mod$parameters$mean[[2]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/two_cluster/chs_removed/sample_", r, "_", s, ".csv"))
+        } else if (gmm_n == 1 & chs_rm == "y") {
+          icc_df <- data.frame(
+            cohort = current_region[r, "cohort"],
+            condition = current_region[r, "condition"],
+            hemisphere = current_region[r, "hemisphere"],
+            subregion = current_region[r, "subregion"],
+            area = current_region[r, "area"],
+            author = current_region[r, "author"],
+            coordinates = current_region[r, "coordinates"],
+            rotation_x = current_region[r, "rotation_x"],
+            rotation_y = current_region[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/one_cluster/chs_removed/sample_", r, "_", s, ".csv"))
+        }
+
+        if (gmm_n == 1 & chs_rm == "n") {
+          plot_title <- paste(s, "| E |", mod$G, "Cluster | ", r)
+          my_filname <- paste0(s, "_", r, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/one_cluster_gmm/no_chs_removed/")
+        } else if (gmm_n == 1 & chs_rm == "y") {
+          plot_title <- paste(s, "| E |", mod$G, "Cluster | ", r, "Chs. 1-9 Rm")
+          my_filname <- paste0(s, "_", r, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/one_cluster_gmm/chs_removed/")
+        } else if (gmm_n == 2 & chs_rm == "n") {
+          plot_title <- paste(s, "|", mod$modelName, "|", mod$G, "Clusters | ", r, "|", c, "|", h)
+          my_filname <- paste0(s, "_", r, "_", c, "_", h, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/two_cluster_gmm/no_chs_removed/subregion_condition_hemisphere/bic_optimal_mod")
+        } else if (gmm_n == 2 & chs_rm == "y") {
+          plot_title <- paste(s, "|", mod$modelName, "|", mod$G, "Clusters | ", r, "Chs. 1-9 Rm")
+          my_filname <- paste0(s, "_", r, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/two_cluster_gmm/chs_removed/")
+        }
+
+        p <- ggplot(data = icc_df, aes(x = intensity)) +
+          geom_density(fill = "lightblue", color = "darkblue") +
+          theme(
+            plot.title = element_text(hjust = 0.5, size = 28, face = "bold"),
+            axis.title = element_text(size = 22, face = "bold"),
+            panel.background = element_blank()
+          ) +
+          xlab("Intensity") +
+          ylab("Density") +
+          ggtitle(paste(plot_title))
+
+        ggsave(
+          path = my_path, filename = my_filname,
+          plot = print(p), device = "png", dpi = 600, width = 9,
+          height = 9, units = "in"
+        )
+      }
+    }
+  }
+  mods <- list()
+  mods_sum <- list()
+}
+```
+## Step 3b: ICC DFs
+```{r icc dataframes}
+if (gmm_n == 1 & chs_rm == "n") {
+  all_files <- list.files("Outputs/pnn_analysis/density_data/one_cluster/no_chs_removed/")
+  files_list <- vector("list", length = length(all_files))
+
+  for (f in all_files) {
+    current_file <- read.csv(paste0("Outputs/pnn_analysis/density_data/one_cluster/no_chs_removed/", f))
+    files_list[[f]] <- current_file
+  }
+  icc_df <- bind_rows(files_list)
+  icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1"))
+} else if (gmm_n == 1 & chs_rm == "y") {
+  all_files <- list.files("Outputs/pnn_analysis/density_data/one_cluster/chs_removed/")
+  files_list <- vector("list", length = length(all_files))
+
+  for (f in all_files) {
+    current_file <- read.csv(paste0("Outputs/pnn_analysis/density_data/one_cluster/chs_removed/", f))
+    files_list[[f]] <- current_file
+  }
+  icc_df <- bind_rows(files_list)
+  icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1"))
+} else if (gmm_n == 2 & chs_rm == "n") {
+  all_files <- list.files("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/", pattern = "sample_[0-9]_*_[A-Z]" )
+  files_list <- vector("list", length = length(all_files))
+
+  for (f in all_files) {
+    current_file <- read.csv(paste0("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/", f))
+    files_list[[f]] <- current_file
+  }
+  icc_df <- bind_rows(files_list)
+  icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1", "mean_2"))
+} else if (gmm_n == 2 & chs_rm == "y") {
+  all_files <- list.files("Outputs/pnn_analysis/density_data/two_cluster/chs_removed/")
+  files_list <- vector("list", length = length(all_files))
+
+  for (f in all_files) {
+    current_file <- read.csv(paste0("Outputs/pnn_analysis/density_data/two_cluster/chs_removed/", f))
+    files_list[[f]] <- current_file
+  }
+  icc_df <- bind_rows(files_list)
+  icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1", "mean_2"))
+}
+```
+## Step 4: ICC Analysis
+```{r icc analysis function}
+icc_analysis <- function(data = all_data, subset_data = FALSE, subset_var = NULL, subset_val = NULL, dependent_var = "mean_2", icc_title = "ICC Analysis", icc_filename = "table", icc_path = "Outputs/pnn_analysis/icc_data/gt_tables/") {
+  iccs <- list()
+  returns <- list()
+
+  if (subset_data == TRUE) {
+    data <- filter(data, {{ subset_var }} == {{ subset_val }})
+  }
+
+  for (c in colnames(data)) {
+    if (c == {{ dependent_var }}) {
+      print("This is the dependent variable. We are skipping it")
+      next
+    } else {
+      icc <- ICCbare(x = {{ c }}, y = {{ dependent_var }}, data = data)
+      iccs[[c]] <- icc
+    }
+  }
+
+  # Making a data frame
+  icc_df_sub <- bind_cols(iccs)
+
+  # Making that data frame a nicer looking table
+  gt_icc <- gt(icc_df)
+  gt_icc <- gt_icc %>%
+    tab_header(
+      title = icc_title
+    ) %>%
+    cols_align(
+      align = "center",
+      columns = c(colnames(icc_df_sub))
+    ) %>%
+    tab_options(heading.align = "center")
+
+
+  gtsave(gt_icc, filename = paste0(icc_filename), path = paste0(icc_path))
+
+  # Adding the outputs we want to return
+  returns[["iccs"]] <- iccs
+
+  return(returns)
+}
+
+icc_output <- suppressWarnings(icc_analysis(data = all_data, subset_data = FALSE, subset_var = NULL, subset_val = NULL, dependent_var = "mean_2", icc_title = "111722 2 Cluster Mean 2 ICC", icc_filename = "111722_all_vars_dep_var_mean_2_two_cluster_gmm.png", icc_path = "Outputs/pnn_analysis/gt_tables/"))
+```
+## Step 4b: P-value Analysis
+```{r p-value analysis}
+rate_of_false_positives <- rep(0, 3)
+rate_of_false_positives[1] <- 1 - (1 - 0.05)^4
+rate_of_false_positives[2] <- 1 - (1 - 0.01)^4
+rate_of_false_positives[3] <- 1 - (1 - 0.001)^4
+
+p_values <- c(0.05, 0.01, 0.001)
+fp_table <- data.frame(p_values, rate_of_false_positives)
+colnames(fp_table) <- c("P-value", "False Positive Rate")
+fp_table <- gt(fp_table)
+fp_table <- fp_table %>%
+  tab_header(
+    title = "Uncorrected P-value Analysis"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c("P-value", "False Positive Rate")
+  ) %>%
+  fmt_percent(
+    columns = "False Positive Rate",
+    decimals = 1
+  )
+
+gtsave(fp_table, path = "Outputs/pnn_analysis/p_value_analysis/", filename = "p_value_analysis.png")
+```
+## Step 5: T-tests with ComplexHeatmap
+```{r complex heatmap}
+test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"), c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5")))
+
+comparisons <- list()
+my_estimates <- list()
+my_estimates_low <- list()
+my_estimates_high <- list()
+my_estimates_low_mod <- list()
+my_sigs <- list()
+my_t_tests <- list()
+plots <- list()
+
+for (c in colnames(test_mat)) {
+  for (r in rownames(test_mat)) {
+    comparisons[[paste0(r, "_", c)]] <- paste0(r, "_", c)
+  }
+}
+
+for (s in unique(icc_df$subregion)) {
+  current_df <- filter(icc_df, subregion == s)
+  for (c in comparisons) {
+    cond_x <- strsplit(c, "_")
+    cond_y <- cond_x[[1]][2]
+    cond_x <- cond_x[[1]][1]
+    current_df_sub <- filter(current_df, condition == cond_x | condition == cond_y)
+    if (length(table(current_df_sub$condition)) < 2) {
+      current_comp <- c()
+      current_comp$estimate <- NA
+      current_comp$p.adj.signif <- ""
+      my_estimates[[paste0(cond_x, cond_y)]] <- current_comp$estimate
+      my_sigs[[paste0(cond_x, cond_y)]] <- current_comp$p.adj.signif
+      my_t_tests[[paste0(cond_x, "_", cond_y)]] <- c(0, 0, 0, "mean_2", names(table(current_df_sub$condition)), names(table(current_df_sub$condition)), unname(table(current_df_sub$condition)), unname(table(current_df_sub$condition)), 0, 1, 0, 0, 0, "T-test", "two.sided", 1, "ns")
+    } else {
+      current_comp <- NULL
+      current_comp <- t_test(data = current_df_sub, formula = mean_2 ~ condition, detailed = TRUE, conf.level = 0.999) %>%
+        adjust_pvalue(method = "holm") %>%
+        add_significance("p.adj")
+      my_t_tests[[paste0(cond_x, "_", cond_y)]] <- current_comp
+      my_estimates[[paste0(cond_x, "_", cond_y)]] <- current_comp$estimate
+      my_sigs[[paste0(cond_x, "_", cond_y)]] <- current_comp$p.adj.signif
+    }
+  }
+
+  estimates_mat <- do.call("cbind", my_estimates)
+  sigs_mat <- do.call("cbind", my_sigs)
+  dim(estimates_mat) <- c(6, 6)
+  dim(sigs_mat) <- c(6, 6)
+  dimnames(estimates_mat) <- list(rownames(test_mat), colnames(test_mat))
+  dimnames(sigs_mat) <- list(rownames(test_mat), colnames(test_mat))
+  lower_estimates <- lower.triangle(estimates_mat)
+  upper_estimates <- upper.triangle(estimates_mat)
+  lower_estimates <- lower_estimates * -1
+  lower_estimates <- apply(lower_estimates, c(1, 2), as.numeric)
+  indicies_to_rep <- which(lower_estimates == 0.000, arr.ind = TRUE)
+  indices_to_use_in_upper <- which(upper_estimates != 0.000, arr.ind = TRUE)
+  lower_estimates[indicies_to_rep] <- upper_estimates[indices_to_use_in_upper]
+
+  if (s == "MOs") {
+    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), na_col = "white", row_names_gp = gpar(fontsize = 5, fontface = "bold"), column_names_gp = gpar(fontsize = 5, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
+      grid.text(sprintf("%s", sigs_mat[i, j]), x, y, gp = gpar(fontsize = 10))
+    }, rect_gp = gpar(color = "black"))
+  } else {
+    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), row_names_gp = gpar(fontsize = 5, fontface = "bold"), na_col = "white", column_names_gp = gpar(fontsize = 5, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
+      grid.text(sprintf("%s", sigs_mat[i, j]), x, y, gp = gpar(fontsize = 10))
+    }, rect_gp = gpar(color = "black"))
+  }
+
+
+
+
+  png(file = paste0("Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/subregion_", s, "_complex_heatmap.png"), units = "in", width = 5, height = 0.3937 * 6 + 0.7423, res = 600)
+  p1 <- draw(p1, height = unit(1, "cm") * 6)
+  draw(p1, height = unit(1, "cm") * 6)
+  dev.off()
+
+  p1 <- grid.grabExpr(draw(p1))
+  plots[[s]] <- p1
+}
+
+combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO")
+save_plot(filename = "Outputs/pnn_analysis/heatmaps/two_cluster_gmm/mean_2/no_chs_removed/combo_plot_complexheatmap.png", plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.1, bg = "white")
+```
