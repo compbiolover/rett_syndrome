@@ -70,125 +70,131 @@ mods <- list()
 mods_sum <- list()
 for (s in unique(all_data$subregion)) {
   current_region <- filter(all_data, subregion == s)
-  for (r in 1:nrow(current_region)) {
-    mod <- densityMclust(as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)]))), modelNames = "E", G = gmm_n, plot = FALSE)
-    mods[[r]] <- mod
-    summary_mod <- summary(mod, parameters = TRUE)
-    mods_sum[[r]] <- summary_mod
-    if (gmm_n == 1 & chs_rm == "n") {
-      icc_df <- data.frame(
-        cohort = current_region[r, "cohort"],
-        condition = current_region[r, "condition"],
-        hemisphere = current_region[r, "hemisphere"],
-        subregion = current_region[r, "subregion"],
-        area = current_region[r, "area"],
-        author = current_region[r, "author"],
-        coordinates = current_region[r, "coordinates"],
-        rotation_x = current_region[r, "rotation_x"],
-        rotation_y = current_region[r, "rotation_y"],
-        mean_1 = mod$parameters$mean[[1]],
-        model_name = mod$modelName,
-        n = mod$n,
-        d = mod$d,
-        num_of_clusters = mod$G,
-        intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
-      )
-      write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/one_cluster/no_chs_removed/sample_", r, "_", s, ".csv"))
-    } else if (gmm_n == 2 & chs_rm == "n") {
-      icc_df <- data.frame(
-        cohort = current_region[r, "cohort"],
-        condition = current_region[r, "condition"],
-        hemisphere = current_region[r, "hemisphere"],
-        subregion = current_region[r, "subregion"],
-        area = current_region[r, "area"],
-        author = current_region[r, "author"],
-        coordinates = current_region[r, "coordinates"],
-        rotation_x = current_region[r, "rotation_x"],
-        rotation_y = current_region[r, "rotation_y"],
-        mean_1 = mod$parameters$mean[[1]],
-        mean_2 = mod$parameters$mean[[2]],
-        model_name = mod$modelName,
-        n = mod$n,
-        d = mod$d,
-        num_of_clusters = mod$G,
-        intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
-      )
-      write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/sample_", r, "_", s, ".csv"))
-    } else if (gmm_n == 2 & chs_rm == "y") {
-      icc_df <- data.frame(
-        cohort = current_region[r, "cohort"],
-        condition = current_region[r, "condition"],
-        hemisphere = current_region[r, "hemisphere"],
-        subregion = current_region[r, "subregion"],
-        area = current_region[r, "area"],
-        author = current_region[r, "author"],
-        coordinates = current_region[r, "coordinates"],
-        rotation_x = current_region[r, "rotation_x"],
-        rotation_y = current_region[r, "rotation_y"],
-        mean_1 = mod$parameters$mean[[1]],
-        mean_2 = mod$parameters$mean[[2]],
-        model_name = mod$modelName,
-        n = mod$n,
-        d = mod$d,
-        num_of_clusters = mod$G,
-        intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
-      )
-      write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/two_cluster/chs_removed/sample_", r, "_", s, ".csv"))
-    } else if (gmm_n == 1 & chs_rm == "y") {
-      icc_df <- data.frame(
-        cohort = current_region[r, "cohort"],
-        condition = current_region[r, "condition"],
-        hemisphere = current_region[r, "hemisphere"],
-        subregion = current_region[r, "subregion"],
-        area = current_region[r, "area"],
-        author = current_region[r, "author"],
-        coordinates = current_region[r, "coordinates"],
-        rotation_x = current_region[r, "rotation_x"],
-        rotation_y = current_region[r, "rotation_y"],
-        mean_1 = mod$parameters$mean[[1]],
-        model_name = mod$modelName,
-        n = mod$n,
-        d = mod$d,
-        num_of_clusters = mod$G,
-        intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
-      )
-      write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/one_cluster/chs_removed/sample_", r, "_", s, ".csv"))
+  for (c in unique(current_region$condition)) {
+    current_condition <- filter(current_region, condition == c)
+    for (h in unique(current_condition$hemisphere)) {
+      curent_sample <- filter(current_condition, hemisphere == h)
+      for (r in 1:nrow(current_sample)) {
+        mod <- densityMclust(as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)]))), G = gmm_n, plot = FALSE)
+        mods[[r]] <- mod
+        summary_mod <- summary(mod, parameters = TRUE)
+        mods_sum[[r]] <- summary_mod
+        if (gmm_n == 1 & chs_rm == "n") {
+          icc_df <- data.frame(
+            cohort = current_region[r, "cohort"],
+            condition = current_region[r, "condition"],
+            hemisphere = current_region[r, "hemisphere"],
+            subregion = current_region[r, "subregion"],
+            area = current_region[r, "area"],
+            author = current_region[r, "author"],
+            coordinates = current_region[r, "coordinates"],
+            rotation_x = current_region[r, "rotation_x"],
+            rotation_y = current_region[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/one_cluster/no_chs_removed/sample_", r, "_", s, ".csv"))
+        } else if (gmm_n == 2 & chs_rm == "n") {
+          icc_df <- data.frame(
+            cohort = current_sample[r, "cohort"],
+            condition = current_sample[r, "condition"],
+            hemisphere = current_sample[r, "hemisphere"],
+            subregion = current_sample[r, "subregion"],
+            area = current_sample[r, "area"],
+            author = current_sample[r, "author"],
+            coordinates = current_sample[r, "coordinates"],
+            rotation_x = current_sample[r, "rotation_x"],
+            rotation_y = current_sample[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            mean_2 = mod$parameters$mean[[2]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_sample[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/subregion_condition_hemisphere/sample_", r, "_", s,"_", c, "_", h, "_optimal_mod.csv"))
+        } else if (gmm_n == 2 & chs_rm == "y") {
+          icc_df <- data.frame(
+            cohort = current_region[r, "cohort"],
+            condition = current_region[r, "condition"],
+            hemisphere = current_region[r, "hemisphere"],
+            subregion = current_region[r, "subregion"],
+            area = current_region[r, "area"],
+            author = current_region[r, "author"],
+            coordinates = current_region[r, "coordinates"],
+            rotation_x = current_region[r, "rotation_x"],
+            rotation_y = current_region[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            mean_2 = mod$parameters$mean[[2]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/two_cluster/chs_removed/sample_", r, "_", s, ".csv"))
+        } else if (gmm_n == 1 & chs_rm == "y") {
+          icc_df <- data.frame(
+            cohort = current_region[r, "cohort"],
+            condition = current_region[r, "condition"],
+            hemisphere = current_region[r, "hemisphere"],
+            subregion = current_region[r, "subregion"],
+            area = current_region[r, "area"],
+            author = current_region[r, "author"],
+            coordinates = current_region[r, "coordinates"],
+            rotation_x = current_region[r, "rotation_x"],
+            rotation_y = current_region[r, "rotation_y"],
+            mean_1 = mod$parameters$mean[[1]],
+            model_name = mod$modelName,
+            n = mod$n,
+            d = mod$d,
+            num_of_clusters = mod$G,
+            intensity = as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)])))
+          )
+          write.csv(icc_df, file = paste0("Outputs/pnn_analysis/density_data/one_cluster/chs_removed/sample_", r, "_", s, ".csv"))
+        }
+
+        if (gmm_n == 1 & chs_rm == "n") {
+          plot_title <- paste(s, "| E |", mod$G, "Cluster | ", r)
+          my_filname <- paste0(s, "_", r, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/one_cluster_gmm/no_chs_removed/")
+        } else if (gmm_n == 1 & chs_rm == "y") {
+          plot_title <- paste(s, "| E |", mod$G, "Cluster | ", r, "Chs. 1-9 Rm")
+          my_filname <- paste0(s, "_", r, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/one_cluster_gmm/chs_removed/")
+        } else if (gmm_n == 2 & chs_rm == "n") {
+          plot_title <- paste(s, "|", mod$modelName, "|", mod$G, "Clusters | ", r, "|", c, "|", h)
+          my_filname <- paste0(s, "_", r, "_", c, "_", h, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/two_cluster_gmm/no_chs_removed/subregion_condition_hemisphere/bic_optimal_mod")
+        } else if (gmm_n == 2 & chs_rm == "y") {
+          plot_title <- paste(s, "|", mod$modelName, "|", mod$G, "Clusters | ", r, "Chs. 1-9 Rm")
+          my_filname <- paste0(s, "_", r, ".png")
+          my_path <- paste0("Outputs/pnn_analysis/density_plots/png/two_cluster_gmm/chs_removed/")
+        }
+
+        p <- ggplot(data = icc_df, aes(x = intensity)) +
+          geom_density(fill = "lightblue", color = "darkblue") +
+          theme(
+            plot.title = element_text(hjust = 0.5, size = 28, face = "bold"),
+            axis.title = element_text(size = 22, face = "bold"),
+            panel.background = element_blank()
+          ) +
+          xlab("Intensity") +
+          ylab("Density") +
+          ggtitle(paste(plot_title))
+
+        ggsave(
+          path = my_path, filename = my_filname,
+          plot = print(p), device = "png", dpi = 600, width = 9,
+          height = 9, units = "in"
+        )
+      }
     }
-
-    if (gmm_n == 1 & chs_rm == "n") {
-      plot_title <- paste(s, "| E |", mod$G, "Cluster | ", r)
-      my_filname <- paste0(s, "_", r, ".png")
-      my_path <- paste0("Outputs/pnn_analysis/density_plots/png/one_cluster_gmm/no_chs_removed/")
-    } else if (gmm_n == 1 & chs_rm == "y") {
-      plot_title <- paste(s, "| E |", mod$G, "Cluster | ", r, "Chs. 1-9 Rm")
-      my_filname <- paste0(s, "_", r, ".png")
-      my_path <- paste0("Outputs/pnn_analysis/density_plots/png/one_cluster_gmm/chs_removed/")
-    } else if (gmm_n == 2 & chs_rm == "n") {
-      plot_title <- paste(s, "|", mod$modelName, "|", mod$G, "Clusters | ", r)
-      my_filname <- paste0(s, "_", r, ".png")
-      my_path <- paste0("Outputs/pnn_analysis/density_plots/png/two_cluster_gmm/no_chs_removed/")
-    } else if (gmm_n == 2 & chs_rm == "y") {
-      plot_title <- paste(s, "|", mod$modelName, "|", mod$G, "Clusters | ", r, "Chs. 1-9 Rm")
-      my_filname <- paste0(s, "_", r, ".png")
-      my_path <- paste0("Outputs/pnn_analysis/density_plots/png/two_cluster_gmm/chs_removed/")
-    }
-
-    p <- ggplot(data = icc_df, aes(x = intensity)) +
-      geom_density(fill = "lightblue", color = "darkblue") +
-      theme(
-        plot.title = element_text(hjust = 0.5, size = 28, face = "bold"),
-        axis.title = element_text(size = 22, face = "bold"),
-        panel.background = element_blank()
-      ) +
-      xlab("Intensity") +
-      ylab("Density") +
-      ggtitle(paste(plot_title))
-
-    ggsave(
-      path = my_path, filename = my_filname,
-      plot = print(p), device = "png", dpi = 600, width = 9,
-      height = 9, units = "in"
-    )
   }
   mods <- list()
   mods_sum <- list()
@@ -217,7 +223,7 @@ if (gmm_n == 1 & chs_rm == "n") {
   icc_df <- bind_rows(files_list)
   icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1"))
 } else if (gmm_n == 2 & chs_rm == "n") {
-  all_files <- list.files("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/")
+  all_files <- list.files("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/", pattern = "sample_[0-9]_*_[A-Z]" )
   files_list <- vector("list", length = length(all_files))
 
   for (f in all_files) {
