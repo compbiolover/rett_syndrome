@@ -135,12 +135,10 @@ p1
 ```{r saving spatial plot}
 ggsave(filename = "spatial_plot.png", plot = p1, units = "in", width = 24, height = 13.5, dpi = 600, path = "Outputs/knn_analysis/plots/", device = "png")
 ```
-
-
-
 ## KNN analysis 
 ```{r knn functions}
-nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, intensity_df = my_x) {
+nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, intensity_df = my_x, use_p_only = TRUE) {
+  obs_to_remove <- c()
   # Check the number of observations is the same
   if (ncol(x) != ncol(obs)) {
     stop("Data must have the same number of variables")
@@ -171,15 +169,29 @@ nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, in
     print(neighbor_ind)
   }
 
-  if (use_intensity == TRUE) {
+  if (use_intensity == TRUE & use_p_only == FALSE) {
     intensity_info <- intensity_df
     intensity_info <- intensity_info[neighbor_ind, ]
     distances_updated <- distances * intensity_info$mean
     distances_updated <- rescale(distances_updated, to = c(0, 1))
-    additional_score <- mean(distances_updated)
-    ret <- list(neighbor_ind, distances, additional_score, distances_updated)
-  } else {
     ret <- list(neighbor_ind, distances)
+  } else if (use_intensity == TRUE & use_p_only == TRUE) {
+    intensity_info <- intensity_df
+    intensity_info <- intensity_info[neighbor_ind, ]
+    intensity_info <- filter(intensity_info, mecp2_p == "P")
+    distances <- distances[1:nrow(intensity_info)]
+    print(nrow(intensity_info))
+    if (nrow(intensity_info) == 0) {
+      print("This sample has only N neighbors. It is being excluded from this analysis.")
+      obs_to_remove <- c(obs, obs_to_remove)
+      ret <- list(0, 0, 0, 0)
+      return(ret)
+    } else {
+      distances_updated <- distances * intensity_info$mean
+      distances_updated <- rescale(distances_updated, to = c(0, 1))
+      additional_score <- mean(distances_updated)
+      ret <- list(neighbor_ind, distances, additional_score, distances_updated)
+    }
   }
   return(ret)
 }
@@ -238,14 +250,21 @@ for (i in 1:length(all_imgs)) {
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
-    if (nn_status[1, ] == "P") {
-      current_img[r, "knn_1_label"] <- 1
-      p_score <- p_score + 1
-      # p_score <- p_score + my_add_p_score
-      p_score <- (nn_status$mecp2_p == "P") / my_add_p_score
+    if (dim(nn_status)[1] == 0) {
+      next
     } else {
-      current_img[r, "knn_1_label"] <- 0
-      n_score <- n_score + 1
+      if (nn_status[1, ] == "P") {
+        current_img[r, "knn_1_label"] <- 1
+        p_score <- p_score + 1
+        if (my_add_p_score == 0) {
+          next
+        } else {
+          p_score <- (nn_status$mecp2_p == "P") / my_add_p_score
+        }
+      } else {
+        current_img[r, "knn_1_label"] <- 0
+        n_score <- n_score + 1
+      }
     }
   }
   write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_1_", i, "_df_16_bit.csv"))
@@ -340,18 +359,21 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-
     my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
     my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
       my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
-      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+      dist_updated <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
     }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
     if (using_intensity == TRUE) {
-      current_img[r, "knn_3_label"] <- (sum((nn_status$mecp2_p == "P")) / 3) / my_add_p_score
+      if (my_add_p_score == 0) {
+        next
+      } else {
+        current_img[r, "knn_3_label"] <- (sum((nn_status$mecp2_p == "P")) / 3) / my_add_p_score
+      }
     } else {
       current_img[r, "knn_3_label"] <- sum((nn_status$mecp2_p == "P")) / 3
     }
@@ -402,7 +424,7 @@ p1 <- ggplot(data = knn_3_df, aes(x = condition_spec, y = knn_3_label, fill = me
   xlab("Condition") +
   ylab("3NN score ") +
   scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
-  geom_signif(y_position = c(4.0, 4.0, 4.0, 4.0), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "ns", "**", "ns"))
+  geom_signif(y_position = c(4.0, 4.0, 4.0, 4.0), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "**", "**", "ns"))
 
 p1
 
@@ -459,7 +481,11 @@ for (i in 1:length(all_imgs)) {
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
     if (using_intensity == TRUE) {
-      current_img[r, "knn_5_label"] <- (sum((nn_status$mecp2_p == "P")) / 5) / my_add_p_score
+      if (my_add_p_score == 0) {
+        next
+      } else {
+        current_img[r, "knn_5_label"] <- (sum((nn_status$mecp2_p == "P")) / 5) / my_add_p_score
+      }
     } else {
       current_img[r, "knn_5_label"] <- sum((nn_status$mecp2_p == "P")) / 5
     }
@@ -508,7 +534,7 @@ p2 <- ggplot(data = knn_5_df, aes(x = condition_spec, y = knn_5_label, fill = me
   xlab("Condition") +
   ylab("5NN score ") +
   scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
-  geom_signif(y_position = c(5.5, 5.5, 5.5, 5.5), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "ns", "ns", "ns"))
+  geom_signif(y_position = c(5.5, 5.5, 5.5, 5.5), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "***", "*", "ns"))
 
 p2
 
@@ -564,7 +590,11 @@ for (i in 1:length(all_imgs)) {
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
     if (using_intensity == TRUE) {
-      current_img[r, "knn_21_label"] <- (sum((nn_status$mecp2_p == "P")) / 21) / my_add_p_score
+      if (my_add_p_score == 0) {
+        next
+      } else {
+        current_img[r, "knn_21_label"] <- (sum((nn_status$mecp2_p == "P")) / 21) / my_add_p_score
+      }
     } else {
       current_img[r, "knn_21_label"] <- sum((nn_status$mecp2_p == "P")) / 21
     }
@@ -615,7 +645,7 @@ p3 <- ggplot(data = knn_21_df, aes(x = condition_spec, y = knn_21_label, fill = 
   xlab("Condition") +
   ylab("21NN score ") +
   scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2\nStatus") +
-  geom_signif(y_position = c(8.5, 8.5, 8.5, 8.5), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "*", "**", "ns"))
+  geom_signif(y_position = c(8.5, 8.5, 8.5, 8.5), xmin = c(0.8, 1.8, 2.8, 3.8), xmax = c(1.2, 2.2, 3.2, 4.2), annotations = c("ns", "**", "****", "ns"))
 
 p3
 
@@ -626,6 +656,7 @@ ggsave(
   units = "in"
 )
 ```
+
 ```{r arrange all knn plots}
 combo_plot <- ggarrange(p0, p1, p2, p3, ncol = 2, nrow = 2, labels = "AUTO", legend = "right", common.legend = TRUE)
 combo_plot <- annotate_figure(combo_plot, top = text_grob("KNN Analysis", face = "bold", size = 14))
@@ -634,7 +665,7 @@ combo_plot <- annotate_figure(combo_plot, top = text_grob("KNN Analysis", face =
 
 ```{r saving combo plot}
 ggsave(
-  plot = combo_plot, filename = "knn_combo_plot.png", device = "png", width = 10,
+  plot = combo_plot, filename = "knn_combo_plot_new_intensity_information.png", device = "png", width = 10,
   height = 10, units = "in", dpi = 600, path = "Outputs/knn_analysis/plots/knn_analysis/",
   bg = "white"
 )
