@@ -688,6 +688,7 @@ ggsave(
 ```{r doing intensity vs mean intensity of  + neighbors correlation analysis}
 p_score <- 0
 n_score <- 0
+k_n <- 21
 using_intensity <- FALSE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
@@ -721,29 +722,29 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = FALSE)
+    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = k_n, FUN = euclidean_distance, use_intensity = FALSE)
     img_means <- c(img_means, current_cell_neighbor_mean)
     current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
   }
-  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_", i, "_knn_3_df_16_bit_mean_neighborhood_analysis.csv"))
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_", i, "_knn_",k_n,"_df_16_bit_mean_neighborhood_analysis.csv"))
   img_means <- c()
 }
 
 all_dfs <- vector(mode = "list", length = 16)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_", i, "_knn_3_df_16_bit_mean_neighborhood_analysis.csv"))
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_", i, "_knn_",k_n,"_df_16_bit_mean_neighborhood_analysis.csv"))
   all_dfs[[i]] <- current_df
 }
 
-mean_neighbor_3_df <- bind_rows(all_dfs)
+mean_neighbor_df <- bind_rows(all_dfs)
 
-mean_neighbor_3_df$condition_spec <- factor(mean_neighbor_3_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+mean_neighbor_df$condition_spec <- factor(mean_neighbor_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 
 # Filtering all cells that have NA as their mean neighborhood intensity (because all neighbors were N annotated)
-mean_neighbor_3_df <- filter(mean_neighbor_3_df, !is.na(mean_neighbor_3_df$positive_neighborhood_mean))
+mean_neighbor_df <- filter(mean_neighbor_df, !is.na(mean_neighbor_df$positive_neighborhood_mean))
 
 p1 <- ggscatter(
-  data = mean_neighbor_3_df,
+  data = mean_neighbor_df,
   x = "mean", y = "positive_neighborhood_mean",
   conf.int = FALSE,
   cor.coef = TRUE,
@@ -763,24 +764,24 @@ p2 <- ggpar(p1,
   legend = "right",
   legend.title = "MECP2\nStatus",
   palette = c("#4682b4", "#F4A460"),
-  main = "KNN = 3 | All Conditions & Images | Spearman Correlation",
+  main = paste0("KNN = ", k_n," | All Conditions & Images | Spearman"),
   font.main = c(16, "bold"),
   font.x = c(14, "bold"),
   font.y = c(14, "bold")
 )
 
-p2 + stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~")),
+p3 <- p2 + stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~")),
   label.x = 3000,
   label.y = 3500
 )
 ```
 
 
-```{r each condition neighborhood analysis knn = 3}
+```{r each condition neighborhood analysis knn}
 plots <- list()
 
-for (c in unique(mean_neighbor_3_df$condition_spec)) {
-  current_cond <- filter(mean_neighbor_3_df, condition_spec == c)
+for (c in unique(mean_neighbor_df$condition_spec)) {
+  current_cond <- filter(mean_neighbor_df, condition_spec == c)
   p1 <- ggscatter(
     data = current_cond,
     x = "mean", y = "positive_neighborhood_mean",
@@ -802,7 +803,7 @@ for (c in unique(mean_neighbor_3_df$condition_spec)) {
     legend = "right",
     legend.title = "MECP2\nStatus",
     palette = c("#4682b4", "#F4A460"),
-    title = paste0("KNN = 3 | ",c, " | Spearman"),
+    title = paste0("KNN = ", k_n, " | ",c, " | Spearman"),
     font.main = c(16, "bold"),
     font.x = c(14, "bold"),
     font.y = c(14, "bold"),
@@ -814,6 +815,20 @@ for (c in unique(mean_neighbor_3_df$condition_spec)) {
     label.y = 3000
   )
   
+  ggsave(plot = p3, filename = paste0("knn_", k_n,"_", c, "_positive_neighborhood_correlation_analysis.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 8, height = 8, units = "in")
+  
   plots[[paste0(c)]] <- p3
 }
+
+# Combo plot
+combo_plot <- ggarrange(plotlist = plots,
+                        ncol = 2,
+                        nrow = 2,
+                        labels = "AUTO",
+                        align = "hv",
+                        legend = "right",
+                        common.legend = TRUE)
+
+ggsave(plot = combo_plot, filename = paste0("knn_",k_n,"_combo_plot_neighborhood_correlation_analysis.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 16, height = 16, units = "in", bg = "white")
+
 ```
