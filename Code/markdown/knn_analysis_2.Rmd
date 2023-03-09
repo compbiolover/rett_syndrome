@@ -688,7 +688,11 @@ ggsave(
 ```{r doing intensity vs mean intensity of  + neighbors correlation analysis}
 p_score <- 0
 n_score <- 0
-k_n <- 21
+k_n <- 3
+# pearson, kendall, or spearman
+stat_used <- "spearman"
+# reg.line or loess
+fit_line <- "loess"
 using_intensity <- FALSE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
@@ -712,6 +716,8 @@ merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "S
 # Removing a single image because it just is grouped by itself
 merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
 merged_df <- merged_df %>% group_by(image)
+# Filtering to just P annotated cells
+merged_df <- filter(merged_df, mecp2_p == "P")
 all_imgs <- merged_df %>% group_split(merged_df)
 
 img_means <- c()
@@ -726,13 +732,13 @@ for (i in 1:length(all_imgs)) {
     img_means <- c(img_means, current_cell_neighbor_mean)
     current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
   }
-  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_", i, "_knn_",k_n,"_df_16_bit_mean_neighborhood_analysis.csv"))
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis.csv"))
   img_means <- c()
 }
 
 all_dfs <- vector(mode = "list", length = 16)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_", i, "_knn_",k_n,"_df_16_bit_mean_neighborhood_analysis.csv"))
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis.csv"))
   all_dfs[[i]] <- current_df
 }
 
@@ -752,19 +758,19 @@ p1 <- ggscatter(
   color = "black",
   fill = "mecp2_p",
   alpha = 0.5,
-  cor.method = "spearman",
+  cor.method = stat_used,
   xlab = "Mean Intensity of Cells",
   ylab = "Mean MECP2+\nNeighborhood Intensity",
   ellipse = TRUE,
   mean.point = TRUE,
-  cor.coeff.args = list(method = "spearman", label.x = 3000)
+  cor.coeff.args = list(method = stat_used, label.x = 3000)
 )
 
 p2 <- ggpar(p1,
   legend = "right",
   legend.title = "MECP2\nStatus",
   palette = c("#4682b4", "#F4A460"),
-  main = paste0("KNN = ", k_n," | All Conditions & Images | Spearman"),
+  main = paste0("KNN = ", k_n, " | All Conditions & Images | ", stat_used),
   font.main = c(16, "bold"),
   font.x = c(14, "bold"),
   font.y = c(14, "bold")
@@ -782,53 +788,100 @@ plots <- list()
 
 for (c in unique(mean_neighbor_df$condition_spec)) {
   current_cond <- filter(mean_neighbor_df, condition_spec == c)
+  current_cond_p <- filter(current_cond, mecp2_p == "P")
+  # Set ellipse and mean.point to TRUE when doing mixed cell analysis
+  # Set them to FALSE for when cells are all N or all P
+  # Set alpha to 0.5 when doing mixed group analysis, 1 when cells
+  # all have the same annotation
+  # Set fill to mecp2_p when examining mixed cell populations
+  # Set fill to black when examining datasets that have one cell annotation
+  # Set cor.coef to TRUE when in single annotation situations, FALSE otherwise
+  # Comment out p2-p5 when examining single annotation populations, use otherwise
   p1 <- ggscatter(
     data = current_cond,
     x = "mean", y = "positive_neighborhood_mean",
-    conf.int = FALSE,
+    conf.int = TRUE,
     cor.coef = TRUE,
     shape = 21,
+    add = fit_line,
+    add.params = list(color = "red",
+                      fill = "red"),
+    repel = TRUE,
+    label.rectangle = TRUE,
     color = "black",
-    fill = "mecp2_p",
-    alpha = 0.5,
-    cor.method = "spearman",
+    fill = "black",
+    alpha = 1,
+    cor.method = stat_used,
     xlab = "Mean Intensity of Cells",
     ylab = "Mean MECP2+\nNeighborhood Intensity",
-    ellipse = TRUE,
-    mean.point = TRUE,
-    cor.coeff.args = list(method = "spearman", label.x = 2000, label.y = 3200)
+    ellipse = FALSE,
+    mean.point = FALSE
   )
 
+  # p2 for the single annotation context
   p2 <- ggpar(p1,
-    legend = "right",
-    legend.title = "MECP2\nStatus",
-    palette = c("#4682b4", "#F4A460"),
-    title = paste0("KNN = ", k_n, " | ",c, " | Spearman"),
+    title = paste0("KNN = ", k_n, " | ", c, " | ", stat_used),
     font.main = c(16, "bold"),
     font.x = c(14, "bold"),
     font.y = c(14, "bold"),
     ggtheme = theme(plot.title = element_text(hjust = 0.5))
   )
 
-  p3 <- p2 + stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~")),
-    label.x = 2000,
-    label.y = 3000
-  )
-  
-  ggsave(plot = p3, filename = paste0("knn_", k_n,"_", c, "_positive_neighborhood_correlation_analysis.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 8, height = 8, units = "in")
-  
-  plots[[paste0(c)]] <- p3
+  # p2 <- ggpar(p1,
+  #   legend = "none",
+  #   legend.title = "MECP2\nStatus",
+  #   palette = c("#4682b4", "#F4A460"),
+  #   title = paste0("KNN = ", k_n, " | ", c, " | Spearman"),
+  #   font.main = c(16, "bold"),
+  #   font.x = c(14, "bold"),
+  #   font.y = c(14, "bold"),
+  #   ggtheme = theme(plot.title = element_text(hjust = 0.5))
+  # )
+
+  # Change to current_cond_p for p-cell only analysis in mixed neighborhoods
+  # Change to current_cond for when there are only p-cells in the dataset
+  # p3 <- p2 + stat_cor(aes(label = paste(..rr.label..)),
+  #   label.x = 2500,
+  #   label.y = 3000,
+  #   method = "spearman",
+  #   data = current_cond
+  # )
+
+  # p4 <- p3 + stat_cor(aes(label = paste(..r.label..)),
+  #   method = "spearman",
+  #   data = current_cond,
+  #   p.accuracy = 0.001,
+  #   r.accuracy = 0.01,
+  #   label.x = 2500,
+  #   label.y = 3150
+  # )
+  #
+  # p5 <- p4 + stat_cor(aes(label = paste(..p.label..)),
+  #   method = "spearman",
+  #   data = current_cond,
+  #   p.accuracy = 0.001,
+  #   r.accuracy = 0.01,
+  #   label.x = 2500,
+  #   label.y = 2850
+  # )
+
+  # Change to p2 when in a single annotation context, p5 otherwise
+  ggsave(plot = p2, filename = paste0("knn_", k_n, "_", c, "_positive_neighborhood_correlation_analysis_p_cells_only_",stat_used,"_only_p_cells_included.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 8, height = 8, units = "in")
+
+  # Change to p2 for single annotation case, p5 otherwise
+  plots[[paste0(c)]] <- p2
 }
 
 # Combo plot
-combo_plot <- ggarrange(plotlist = plots,
-                        ncol = 2,
-                        nrow = 2,
-                        labels = "AUTO",
-                        align = "hv",
-                        legend = "right",
-                        common.legend = TRUE)
+combo_plot <- ggarrange(
+  plotlist = plots,
+  ncol = 2,
+  nrow = 2,
+  labels = "AUTO",
+  align = "hv",
+  legend = "right",
+  common.legend = TRUE
+)
 
-ggsave(plot = combo_plot, filename = paste0("knn_",k_n,"_combo_plot_neighborhood_correlation_analysis.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 16, height = 16, units = "in", bg = "white")
-
+ggsave(plot = combo_plot, filename = paste0("knn_", k_n, "_combo_plot_neighborhood_correlation_analysis_p_cells_only_",stat_used,"_only_p_cells_included.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 16, height = 16, units = "in", bg = "white")
 ```
