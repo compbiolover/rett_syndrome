@@ -1,0 +1,376 @@
+---
+title: "12 Wk Tactile PNN Data"
+author: "Andrew Willems and Tian Hong"
+date: "3/28/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/rett_syndrome/")
+
+# This line sets the root directory for the RMarkdown document to "~/Documents/Work/Phd_program/hong_lab/Projects/rett_syndrome/".
+# This means that any paths used in the document will be relative to this directory.
+# This line is necessary for correctly resolving any file paths used in the document.
+```
+
+## Objective: Analyze 12 week tactile PNN data for collaborators
+
+## Step 1: Load needed packages
+```{r loading packages}
+# Purpose: Load necessary packages for data analysis and visualization
+
+# Required packages:
+# emmeans: Calculate estimated marginal means for linear models
+# furrr: Parallel processing for R using purrr
+# ggplot2: Create high-quality data visualizations
+# ggpubr: Add additional functionality to ggplot2, such as statistical tests and themes
+# ggsignif: Add significance markers to ggplot2 plots
+# gt: Create high-quality tables with custom formatting and styling
+# ICC: Calculate intraclass correlation coefficients for reliability analysis
+# lme4: Fit linear mixed-effects models to data
+# lmerTest: Calculate p-values and other statistics for linear mixed-effects models
+# magrittr: Add additional functionality to the pipe operator (%>%)
+# mclust: Fit Gaussian mixture models for clustering analysis
+# modelsummary: Create summary tables and graphs for regression models
+# nlme: Fit nonlinear mixed-effects models to data
+# rstatix: Calculate common statistical tests and visualizations in R
+# tidyverse: A collection of R packages for data manipulation and visualization
+# webshot: Take screenshots of web pages from R
+
+# Usage:
+# This code should be run at the beginning of any R script that requires one or more of these packages.
+# After running this code, the packages will be loaded into the R session and ready to use.
+# Note that the pacman package is required for this code to work.
+
+# Code:
+pacman::p_load(
+  emmeans, furrr, ggplot2, ggpubr, ggsignif, gt, ICC, lme4,
+  lmerTest, magrittr, mclust, modelsummary, mvtnorm, nlme, parallel,
+  purrr, rstatix, tidyverse, webshot
+)
+```
+
+## Step 2: Load in data
+```{r loading data}
+chs_rm <- "n"
+
+# Load the Tactile PNN Histogram Data csv file into a data frame
+tac_data <- read.csv("Data/12_week_tactile_pnn_data/12wk Tactile PNN Histogram Data.csv", header = FALSE)
+
+# Read in Tactile metadata
+meta_data <- read.csv("Data/12_week_tactile_pnn_data/meta_data.csv")
+meta_data$cohort <- gsub(pattern = "#", replacement = "", x = meta_data$cohort)
+
+# Read in expression data
+expr_data <- read.csv("Data/12_week_tactile_pnn_data/expr_data.csv", header = FALSE)
+
+# Assign column names to the expression data frame using 'ch_' followed by the column number
+colnames(expr_data) <- paste0("sample_", 1:ncol(expr_data))
+expr_data <- apply(expr_data, 2, as.numeric)
+expr_data <- t(expr_data)
+colnames(expr_data) <- paste0("ch_", 1:ncol(expr_data))
+expr_data <- as.data.frame(expr_data)
+expr_data <- expr_data %>% slice(-1)
+
+# If 'chs_rm' is set to "n", write to the console that no channels have been removed for this analysis
+if (chs_rm == "n") {
+  writeLines("No channels were removed from the analysis.")
+
+  # Otherwise, remove all columns from the all_data data frame except for 'condition' through 'cohort', and 'ch_10' through 'ch_256'
+} else {
+  expr_data <- subset(expr_data, select = c(ch_10:ch_256))
+}
+
+
+all_data <- bind_cols(meta_data, expr_data)
+
+
+# Subset function for the data
+subset_data <- function(data, cohort = NULL, condition = NULL, hemisphere = NULL, subregion = NULL) {
+  # Description:
+  # This function subsets a given input dataset based on provided filtering criteria, and returns a list of data frames containing all possible
+  # combinations of the filtering variables as separate data frames.
+
+  #   Parameters:
+  # data: Input dataset to be subsetted
+  # cohort: A character vector representing the cohort variable column name in the input dataset. Default is NULL.
+  # condition: A character vector representing the condition variable column name in the input dataset. Default is NULL.
+  # hemisphere: A character vector representing the hemisphere variable column name in the input dataset. Default is NULL.
+  # subregion: A character vector representing the subregion variable column name in the input dataset. Default is NULL.
+
+  # Returns:
+  # A list of data frames, with each data frame representing a unique combination of the filtering criteria.
+
+
+  # Check which arguments are NULL
+  if (is.null(cohort)) cohort <- distinct(data, cohort) %>% pull()
+  if (is.null(condition)) condition <- distinct(data, condition) %>% pull()
+  if (is.null(hemisphere)) hemisphere <- distinct(data, hemisphere) %>% pull()
+  if (is.null(subregion)) subregion <- distinct(data, subregion) %>% pull()
+
+  # Create all possible combinations of filtering criteria
+  filter_combinations <- expand.grid(cohort, condition, hemisphere, subregion)
+
+  # Loop over all combinations and subset the data
+  data_list <- map2(
+    .x = split(
+      seq(nrow(filter_combinations)),
+      rep(1:nrow(filter_combinations), each = 1)
+    ),
+    .y = split(
+      as.data.frame(filter_combinations),
+      rep(1:nrow(filter_combinations), each = 1)
+    ),
+    function(indices, filter_df) {
+      filter(
+        data, cohort == filter_df$Var1[1],
+        condition == filter_df$Var2[1],
+        hemisphere == filter_df$Var3[1],
+        subregion == filter_df$Var4[1]
+      )
+    }
+  )
+
+  names(data_list) <- apply(filter_combinations, 1, paste, collapse = "_")
+
+  return(data_list)
+}
+
+
+unique_combos <- subset_data(data = all_data)
+```
+
+## Step 3: GMM Analysis
+```{r gmm analysis}
+# Define the number of cores to use
+n_cores <- detectCores()
+
+# Define the function to compute the densityMclust model for a single row
+compute_densityMclust <- function(row, G) {
+  # compute_density: A function to compute density models for every row in a data frame using the densityMclust function from the Mclust package.
+  #
+  # Arguments:
+  # - data: A data frame containing the intensity data for each row.
+  # - gmm_n: An integer specifying the number of Gaussian mixture components to fit in the density model.
+  # - chs_rm: A character vector specifying whether to remove channels 1-9 from the intensity data. Must be either "y" or "n".
+  # - n_cores: An integer specifying the number of cores to use for parallelization. Default is 1.
+  # - output_dir: A character vector specifying the directory to save the output CSV files. Default is the current working directory.
+  #
+  # Returns:
+  # A list of density models and summary statistics for each row of the input data frame. Each element of the list contains the following items:
+  # - model: The density model object returned by the densityMclust function.
+  # - summary: A summary of the density model parameters.
+  #
+  # Example:
+  # density_models <- compute_density(data = my_data, gmm_n = 2, chs_rm = "n", n_cores = 4, output_dir = "~/density_results")
+
+  mod <- densityMclust(as.numeric(row), G = G, plot = FALSE)
+  return(list(mod = mod, summary = summary(mod, parameters = TRUE)))
+}
+
+
+# Define the function to compute densityMclust models in parallel
+# Inputs:
+# data: A data frame containing the data to be used for computing the densityMclust models.
+# G: The maximum number of mixture components to be considered when fitting the model.
+# n_cores: The number of CPU cores to use for parallelization.
+
+# Arguments:
+# data: A data frame where each row represents an observation.
+# G: A positive integer indicating the maximum number of mixture components to be considered when fitting the model.
+# n_cores: An integer indicating the number of CPU cores to use for parallelization.
+
+# Outputs:
+# mods: A list of densityMclust models computed for each row of the input data frame.
+# summaries: A list of summaries for each densityMclust model computed for each row of the input data frame.
+
+# Function Description:
+# The compute_densityMclust_parallel function takes in a data frame, G, and n_cores as input arguments. It splits the data frame into a list of rows
+# computes the densityMclust models for each column using the compute_densityMclust function. This computation is done in parallel across the specified
+# number of CPU cores. The function then returns a list containing the densityMclust models and their summaries for each column of the input data frame.
+# Check column names for pattern
+
+
+compute_densityMclust_parallel <- function(data_list, G = 2, n_cores = 12, mod_name = "E", pattern = "ch_", output_dir = "~/Desktop/") {
+  # Create output directory if it does not exist
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+
+  # Compute the densityMclust models in parallel for each row of each dataframe
+  mods <- mclapply(data_list, function(df) {
+    mclapply(seq_len(nrow(df)), function(r) {
+      current_row <- df[r, grep(pattern, names(df))]
+      mod <- densityMclust(as.numeric(as.vector(unlist(current_row))), G = G, modelName = mod_name, plot = FALSE)
+      summary_mod <- summary(mod, parameters = TRUE)
+      filename <- paste0(
+        output_dir, "/density_model_row", r, "_",
+        unique(df$condition), "_", unique(df$subregion), "_",
+        unique(df$hemisphere), "_", unique(df$cohort), ".csv"
+      )
+      mod_params <- data.frame(
+        mean_1 = summary_mod$mean[[1]],
+        mean_2 = summary_mod$mean[[2]],
+        variance_1 = summary_mod$variance[[1]],
+        variance_2 = summary_mod$variance[[2]],
+        n_observations = summary_mod$n,
+        n_clusters = summary_mod$G,
+        n_dims = summary_mod$d,
+        condition = unique(df$condition),
+        cohort = unique(df$cohort),
+        subregion = unique(df$subregion),
+        hemisphere = unique(df$hemisphere),
+        intensity = current_row
+      )
+
+      # Write mod_params to file
+      tryCatch(
+        {
+          write.csv(mod_params, filename, row.names = FALSE, na = "", quote = TRUE)
+        },
+        error = function(e) {
+          cat("Error writing file:", filename, "\n")
+        }
+      )
+
+      return(list(mod_params, mod))
+    }, mc.cores = n_cores)
+  }, mc.cores = n_cores)
+
+  return(mods)
+}
+
+
+results <- compute_densityMclust_parallel(data = unique_combos, G = 2, mod_name = "E", n_cores = n_cores, pattern = "ch_", output_dir = "~/Desktop/2-cluster-gmm/no_chs_removed/")
+
+
+# Reading in all of the files to then be plotted
+read_files <- function(folder_path, pattern) {
+  # Get a list of all files in the folder that match the pattern
+  file_list <- list.files(path = folder_path, pattern = pattern, full.names = TRUE)
+
+  # Read in all CSV files and combine into a single dataframe
+  data <- do.call(rbind, lapply(file_list, read.csv))
+
+  return(data)
+}
+
+all_plot_data <- read_files(folder_path = "~/Desktop/2-cluster-gmm/no_chs_removed/", pattern = "*.csv")
+```
+
+```{r plotting code}
+# Define a function to generate the annotations based on the p-value
+get_annotations <- function(p_value) {
+  if (p_value < 0.001) {
+    return("***")
+  } else if (p_value < 0.01) {
+    return("**")
+  } else if (p_value < 0.05) {
+    return("*")
+  } else {
+    return("ns")
+  }
+}
+
+
+
+
+plot_pnn_violin <- function(data, subregion_val, depen_var, hemisphere_val, save_plot = TRUE, plot_name = "plot.png", plot_dpi = 600, plot_device = "png", plot_path = "Outputs/pnn_analysis/density_plots_12_wk_tact/one_cluster_gmm/no_chs_removed/", plot_height = 12, plot_width = 12) {
+  # Filter the data for the subregion and hemisphere, and select columns of interest
+  subregion_data <- data %>%
+    filter(subregion == subregion_val & hemisphere == hemisphere_val) %>%
+    select(cohort, condition, subregion, hemisphere, depen_var)
+
+  # Fit the linear mixed-effects model
+  lme_model <- lmer(as.formula(paste0(depen_var, " ~ condition + (1|cohort)")), data = subregion_data)
+
+  # Compute the p-value using the lmerTest package
+  library(lmerTest)
+  p_value <- summary(lme_model)$coefficients[2, "Pr(>|t|)"]
+
+  # calculate counts per group
+  counts <- table(subregion_data$condition)
+
+  # Create a label for the t-test and p-value
+  t_label <- paste(
+    "t = ",
+    round(summary(lme_model)$coefficients[2, "t value"], 2),
+    ", p = ",
+    signif(p_value, digits = 3),
+    ", n = ", sum(counts)
+  )
+
+  cohort_means <- subregion_data %>%
+    group_by(cohort, condition) %>%
+    summarize(mean_intensity = mean(as.numeric(!!sym(depen_var))))
+
+
+  # Convert means to a factor
+  cohort_means$means_factor <- factor(cohort_means$mean_intensity)
+  cohort_means$cohort <- factor(cohort_means$cohort)
+
+
+  # Create the x-axis labels with count information
+  labels <- paste0(c("WT", "Het"), "\n", "n = ", counts)
+
+  # Create the plot
+  pnn_plot <- ggplot(subregion_data, aes(x = condition, y = !!sym(depen_var))) +
+    geom_violin(colour = "black", scale = "width", adjust = 0.75, draw_quantiles = c(0.25, 0.50, 0.75)) +
+    geom_point(
+      data = cohort_means, aes(x = condition, y = mean_intensity, fill = cohort),
+      shape = 21, size = 6
+    ) +
+    scale_x_discrete(limits = c("WT", "Het"), labels = labels) +
+    labs(
+      x = NULL, y = "PNN Intensity",
+      title = paste0(subregion_val, " | ", hemisphere_val),
+      subtitle = t_label
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 30, hjust = 0.5),
+      plot.subtitle = element_text(size = 20, hjust = 0.5),
+      axis.title.x = element_text(face = "bold", size = 24),
+      axis.title.y = element_text(face = "bold", size = 24),
+      axis.text.x = element_text(size = 20),
+      axis.text.y = element_text(size = 20),
+      axis.ticks.length = unit(0.2, "cm"),
+      legend.position = "bottom",
+      legend.title = element_text(size = 24, face = "bold"),
+      legend.text = element_text(size = 20),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      axis.line = element_line(
+        color = "black", linewidth = 1.25,
+        lineend = "round"
+      )
+    ) +
+    geom_signif(
+      comparisons = list(c("WT", "Het")),
+      size = 1.25, 
+      textsize = 3.88,
+      annotations = get_annotations(p_value)
+    ) +
+    scale_fill_manual(values = c("purple", "green", "blue"), name = "Cohort")
+
+  if (save_plot == TRUE){
+    ggsave(filename = plot_name, path = plot_path, device = plot_device, dpi = plot_dpi,
+           height = plot_height, width = plot_width, units = "in")
+  }
+
+  return(pnn_plot)
+}
+
+all_plots <- list()
+counter <- 1
+for (sr in unique(all_plot_data$subregion)){
+  for (h in unique(all_plot_data$hemisphere)){
+    all_plots[[counter]] <- plot_pnn_violin(data = all_plot_data, subregion_val = paste0(sr), depen_var = "mean_2", hemisphere_val = paste0(h), save_plot = TRUE, plot_dpi = 600, plot_device = "svg", plot_name = paste0("plot_", sr,"_", h, "_2_comp_gmm_mean2.png"), plot_path = "~/Desktop/2-cluster-gmm-plots/no_chs_removed/", plot_height = 10, plot_width = 10)
+    counter <- counter + 1
+  }
+}
+
+combo_plot <- ggarrange(plotlist = all_plots, ncol = 4, nrow = 4, labels = "AUTO", font.label = list(size = 16), align = "hv", common.legend = TRUE, legend = "bottom")
+ggsave(plot = combo_plot, device = "png", path = "~/Desktop/2-cluster-gmm-plots/no_chs_removed/", units = "in", width = 20, height = 20, bg = "white", filename = "combo_plot_2_comp_gmm_mean2.png", dpi = 600)
+```
