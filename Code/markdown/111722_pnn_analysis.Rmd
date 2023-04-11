@@ -13,55 +13,45 @@ knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/
 
 ## Step 1: Load needed packages
 ```{r loading packages}
-suppressMessages(library(circlize))
-suppressMessages(library(ComplexHeatmap))
-suppressMessages(library(cowplot))
-suppressMessages(library(ggplot2))
-suppressMessages(library(ggpubr))
-suppressMessages(library(ggsignif))
-suppressMessages(library(gplots))
-suppressMessages(library(grid))
-suppressMessages(library(gt))
-suppressMessages(library(gtable))
-suppressMessages(library(ICC))
-suppressMessages(library(matrixcalc))
-suppressMessages(library(mclust))
-suppressMessages(library(rstatix))
-suppressMessages(library(tidyverse))
-suppressMessages(library(webshot2))
+suppressMessages(pacman::p_load(circlize, ComplexHeatmap, cowplot, ggplot2, ggpubr, ggsignif,
+              gplots, grid, gt, gtable, ICC, matrixcalc, mclust, rstatix, stringr,
+              tidyverse, webshot2))
 ```
 ## Step 2: Load in data
 ```{r loading data}
-chs_rm <- "n"
-gmm_n <- 2
-using_mean1 <- FALSE
+# Set input parameters
+chs_rm <- "n"   # Whether or not to remove certain channels (default is no)
+gmm_n <- 2      # Number of Gaussian mixture components for fitting
+using_mean1 <- FALSE  # Whether or not to use the first mean for initialization
 
-pnn_data <- read.csv("Data/111722_pnn_histogram_data/111722_pnn_histogram_data_complete.csv", sep = ",")
-meta_data <- pnn_data[1:10, 1:2981]
-meta_data <- t(meta_data)
+# Read in the data from a CSV file
+pnn_data <- read.csv("Data/111722_pnn_histogram_data/111722_pnn_histogram_data_complete.csv", sep = ",", stringsAsFactors = FALSE)
+
+# Extract the metadata from the data and restructure it
+meta_data <- t(pnn_data[1:10, 1:2981])
 colnames(meta_data) <- meta_data[1, ]
-meta_data <- as.data.frame(meta_data)
-meta_data <- meta_data[2:2981, ]
-meta_data$author <- rownames(meta_data)[2:2981]
-rownames(meta_data) <- 1:nrow(meta_data)
+meta_data <- as.data.frame(meta_data[-1, ])
+meta_data$author <- rownames(meta_data)
+rownames(meta_data) <- NULL
 colnames(meta_data) <- c("date", "cohort", "condition", "coordinates", "hemisphere", "subregion", "rotation_x", "rotation_y", "z_position", "area", "author")
-meta_data$cohort <- gsub(pattern = "#", replacement = "", x = meta_data$cohort)
-meta_data$author <- gsub(pattern = "[0123456789]", replacement = "", x = meta_data$author)
-meta_data$author <- gsub(pattern = "LD...", replacement = "LD", x = meta_data$author)
-meta_data$author <- gsub(pattern = "JM...", replacement = "JM", x = meta_data$author)
-meta_data$author <- gsub(pattern = "RS...", replacement = "RS", x = meta_data$author)
-meta_data$author <- gsub(pattern = "LD.", replacement = "LD", x = meta_data$author)
-meta_data$author <- gsub(pattern = "JM.", replacement = "JM", x = meta_data$author)
-meta_data$author <- gsub(pattern = "RS.", replacement = "RS", x = meta_data$author)
-expr_data <- pnn_data[11:266, 2:2981]
-expr_data <- t(expr_data)
-expr_data <- as.data.frame(expr_data)
+
+# Clean up the metadata
+meta_data$cohort <- str_replace_all(meta_data$cohort, "#", "")  # Remove pound sign from cohort column
+meta_data$author <- str_replace_all(meta_data$author,    # Clean up author names by removing digits and abbreviating names
+  c("[0123456789]" = "", "LD\\." = "LD", "JM\\." = "JM", "RS\\." = "RS", "LD..." = "LD", "JM..." = "JM", "RS..." = "RS"))
+
+# Extract the expression data from the data and restructure it
+expr_data <- t(pnn_data[11:266, 2:2981])
 colnames(expr_data) <- paste0("ch_", 1:ncol(expr_data))
+expr_data <- as.data.frame(expr_data)
+
+# Combine the metadata and expression data into one data frame
+# If chs_rm is set to "n", keep all channels, otherwise only keep channels 10-256
 if (chs_rm == "n") {
   all_data <- bind_cols(meta_data, expr_data)
 } else {
-  all_data <- bind_cols(meta_data, expr_data)
-  all_data <- subset(all_data, select = c(date:author, ch_10:ch_256))
+  chs_data <- subset(expr_data, select = c(ch_10:ch_256))
+  all_data <- bind_cols(meta_data, chs_data)
 }
 ```
 ## Step 3a: Mclust
@@ -73,7 +63,7 @@ for (s in unique(all_data$subregion)) {
   for (c in unique(current_region$condition)) {
     current_condition <- filter(current_region, condition == c)
     for (h in unique(current_condition$hemisphere)) {
-      curent_sample <- filter(current_condition, hemisphere == h)
+      current_sample <- filter(current_condition, hemisphere == h)
       for (r in 1:nrow(current_sample)) {
         mod <- densityMclust(as.numeric(as.vector(unlist(current_region[r, 12:ncol(all_data)]))), G = gmm_n, plot = FALSE)
         mods[[r]] <- mod

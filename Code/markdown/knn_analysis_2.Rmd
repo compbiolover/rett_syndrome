@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")
 ```
 
+
 ## Loading packages
 ```{r loading needed packages}
 suppressMessages(library(caret))
@@ -21,6 +22,7 @@ suppressMessages(library(ggpubr))
 suppressMessages(library(ggsignif))
 suppressMessages(library(rstatix))
 suppressMessages(library(readxl))
+suppressMessages(library(reticulate))
 suppressMessages(library(scales))
 suppressMessages(library(tidyverse))
 ```
@@ -688,11 +690,11 @@ ggsave(
 ```{r doing intensity vs mean intensity of  + neighbors correlation analysis}
 p_score <- 0
 n_score <- 0
-k_n <- 3
+k_n <- 21
 # pearson, kendall, or spearman
 stat_used <- "spearman"
 # reg.line or loess
-fit_line <- "loess"
+fit_line <- "reg.line"
 using_intensity <- FALSE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
@@ -874,7 +876,10 @@ for (c in unique(mean_neighbor_df$condition_spec)) {
 
 # Combo plot
 combo_plot <- ggarrange(
-  plotlist = plots,
+  plots$NW,
+  plots$SW,
+  plots$NH,
+  plots$SH,
   ncol = 2,
   nrow = 2,
   labels = "AUTO",
