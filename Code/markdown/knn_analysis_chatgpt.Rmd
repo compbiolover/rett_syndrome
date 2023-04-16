@@ -1,0 +1,391 @@
+---
+title: "KNN Analysis"
+author: "Andrew Willems & Tian Hong"
+date: "2023-04-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")
+```
+
+```{r}
+# Load necessary packages
+# suppressMessages is used to prevent the loading message from being displayed
+# pacman is used for loading packages and automatically installs them if necessary
+
+suppressMessages(pacman::p_load(
+  caret, # Provides tools for machine learning modeling and evaluation
+  class, # Provides functions for k-nearest neighbors classification
+  deldir, # Provides functions for Delaunay triangulation and Dirichlet tesselation
+  effectsize, # Provides functions for calculating effect sizes
+  ggforce, # Extends ggplot2 with additional plot types and features
+  ggpubr, # Provides functions for combining and annotating ggplot2 plots
+  ggsignif, # Provides functions for adding significance annotations to ggplot2 plots
+  rstatix, # Provides a suite of functions for statistical analysis and visualization
+  readxl, # Provides functions for reading Excel files
+  reticulate, # Provides interfaces to Python from within R
+  scales, # Provides functions for scaling and formatting data for visualization
+  tidyverse # A collection of packages for data manipulation, visualization, and analysis
+))
+```
+
+
+```{r}
+naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+```
+
+```{r}
+# Rename columns of each data frame
+colnames(naive_df_wt) <- colnames(naive_df_het) <- colnames(sur_df_wt) <- colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+
+# Add a new column to each data frame indicating the condition (WT or HET)
+naive_df_wt$condition <- "WT"
+naive_df_het$condition <- "HET"
+sur_df_wt$condition <- "WT"
+sur_df_het$condition <- "HET"
+
+# Combine all data frames into a single data frame
+merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
+
+# Add a new column to indicate the specific condition using the "NW", "NH", "SW", and "SH" codes
+condition_spec_values <- c("NW", "NH", "SW", "SH") # Define the condition codes
+condition_spec_counts <- c(nrow(naive_df_wt), nrow(naive_df_het), nrow(sur_df_wt), nrow(sur_df_het)) # Calculate the number of rows in each subset
+merged_df$condition_spec <- factor(rep(condition_spec_values, condition_spec_counts), levels = c("NW", "SW", "NH", "SH")) # Add the new column as a factor variable
+
+# Removing intermediate variables to keep environment tidy
+rm(condition_spec_counts, condition_spec_values)
+```
+
+```{r cell count plot}
+p1 <- ggplot(data = merged_df, aes(x = condition_spec, fill = mecp2_p)) +
+  geom_bar(position = position_dodge(width = 0.9), alpha = 0.8) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.background = element_blank(),
+    axis.text = element_text(size = 24),
+    axis.title = element_text(size = 26),
+    axis.ticks.y = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 28),
+    plot.subtitle = element_text(hjust = 0.5),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid", size = 1),
+    legend.position = "bottom",
+    aspect.ratio = 1,
+    legend.title = element_text(size = 18)
+  ) +
+  labs(x = "Condition", y = "Cell Count", fill = "MECP2 Expression") +
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "", labels = c("Not expressed", "Expressed")) +
+  ggtitle("MECP2 Expression in Different Conditions") +
+  labs(caption = "Note: The data refers to the expression of MECP2 protein in different conditions.") +
+  geom_text(aes(label = round(..count..)), stat = "count", position = position_dodge(width = 0.7), vjust = -0.5, size = 5) +
+  labs(subtitle = "MECP2 Expression indicates whether MECP2 is present or not")
+
+p1
+```
+
+```{r saving cell count plot}
+ggsave(
+  filename = "Outputs/knn_analysis/plots/condition_vs_cell_count_chatgpt.png",
+  plot = p1,
+  device = "png", dpi = 600,
+  width = 10, height = 10,
+  units = "in"
+)
+```
+
+```{r}
+# Sample dataframe with image titles and MECP2 status for each condition
+df <- data.frame(
+  image = paste0("Image", rep(1:17, each = 4)),
+  condition = rep(c("NW", "SW", "NH", "SH"), times = 17),
+  mecp2_status = sample(c("Expressed", "Not expressed"), size = 68, replace = TRUE),
+  x = rnorm(68, 25, 5),
+  y = rnorm(68, 12, 3)
+)
+
+# Group dataframe by image and condition, and calculate total cell count for each image/condition combination
+df_grouped <- df %>%
+  group_by(image, condition) %>%
+  summarize(total_count = n())
+
+
+# Define function to create plot for each group of 3 images and save to file
+create_plot <- function(start_image_num, df = merged_df) {
+  # Subset dataframe for specific images
+  image_df <- filter(df, grepl(paste0("z", start_image_num:(start_image_num + 2)), image))
+
+
+  # Create scatter plot showing MECP2 status for each condition using X and Y positions
+  p <- ggplot(image_df, aes(x = x, y = y, color = mecp2_p)) +
+    geom_point(size = 3) +
+    facet_grid(condition ~ image, scales = "free_x", space = "free_x") +
+    labs(x = "X (Coordinate)", y = "Y (Coordinate)") +
+    scale_color_manual(values = c("#4682b4", "#F4A460"), name = "MECP2 Expression", labels = c("Not Expressed", "Expressed")) +
+    ggtitle(paste0("MECP2 Expression in Images ", start_image_num, " to ", start_image_num + 2)) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+      axis.title.x = element_text(size = 12, face = "bold"),
+      axis.title.y = element_text(size = 12, face = "bold"),
+      strip.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.position = "top",
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank(),
+      axis.line = element_line(colour = "black"),
+      axis.ticks = element_line(colour = "black"),
+      axis.text = element_text(size = 12)
+    )
+
+  # Save plot to file
+  ggsave(paste0("images_", start_image_num, "-", start_image_num + 2, ".png"), p, width = 8, height = 8, dpi = 600)
+}
+
+# Loop through each group of 3 images and create plot
+for (i in seq(1, 18, 3)) {
+  create_plot(i)
+}
+```
+
+```{r knn analysis}
+find_knn <- function(data, k, col1 = "x", col2 =  "y", dist_metric = "euclidean", score_col = NULL) {
+  # Function to find K-nearest neighbors for each row of a dataframe
+# Args:
+#   data: dataframe with the data to use for finding the nearest neighbors
+#   k: number of nearest neighbors to find
+#   cols: vector of two column names that represent the x and y coordinates to use for distance calculation
+#   dist_metric: the distance metric to use, default is euclidean distance
+# Returns:
+#   data with new columns for nearest neighbor indices and distances
+
+# Function to find K-nearest neighbors for each row of a dataframe
+# Args:
+#   data: dataframe with the data to use for finding the nearest neighbors
+#   k: number of nearest neighbors to find
+#   cols: vector of two column names that represent the x and y coordinates to use for distance calculation
+#   dist_metric: the distance metric to use, default is euclidean distance
+# Returns:
+#   data with new columns for nearest neighbor indices and distances
+  
+  # Convert column names to indices
+  x_col <- col1
+  y_col <- col2
+  
+  # Create empty columns for nearest neighbor indices and distances
+  data$knn_indices <- NA
+  data$knn_distances <- NA
+  data$additional_score <- NA
+  
+  
+  # Loop through each row of the dataframe
+  for (i in 1:nrow(data)) {
+    # Get the x and y values for the current row
+    x_val <- data[i, x_col]
+    y_val <- data[i, y_col]
+    
+    
+    # Subset the data to all rows except the current one
+    subset_data <- data[-i,]
+    subset_data <- as.data.frame(subset_data)
+    
+  
+    
+    # Calculate the distance between the current row and all other rows using the specified distance metric
+    if (dist_metric == "euclidean") {
+      distances <- sqrt((subset_data[, x_col] - x_val)^2 + (subset_data[, y_col] - y_val)^2)
+    } else if (dist_metric == "minkowski") {
+      distances <- apply(subset_data[, c(x_col, y_col)], 1, function(row) sum(abs(row - c(x_val, y_val))^3)^(1 / 3))
+    } else if (dist_metric == "manhattan") {
+      distances <- apply(subset_data[, c(x_col, y_col)], 1, function(row) sum(abs(row - c(x_val, y_val))))
+    } else if (dist_metric == "cosine") {
+      distances <- apply(subset_data[, c(x_col, y_col)], 1, function(row) 1 - (row %*% c(x_val, y_val)) / (sqrt(sum(row^2)) * sqrt(sum(c(x_val, y_val)^2))))
+    } else if (dist_metric == "hamming") {
+      distances <- apply(subset_data[, c(x_col, y_col)], 1, function(row) sum(row != c(x_val, y_val)))
+    } else if (dist_metric == "jaccard") {
+      distances <- apply(subset_data[, c(x_col, y_col)], 1, function(row) 1 - sum(row & c(x_val, y_val)) / sum(row | c(x_val, y_val)))
+    } else {
+      stop("Invalid distance metric specified")
+    }
+    
+    # Get the indices of the k nearest neighbors
+    knn_indices <- order(distances)[1:k]
+    
+    # Calculate additional score based on the numeric column
+    if (!is.null(score_col)) {
+      additional_score <- distances[knn_indices] * subset_data[knn_indices, score_col]
+      data[i, "additional_score"] <- as.character(paste(additional_score, collapse = ","))
+    } else {
+      additional_score <- rep(NA, k)
+      data[i, "additional_score"] <- as.character(paste(additional_score, collapse = ","))
+    }
+    
+    # Update the data frame with the nearest neighbor indices, distances, and additional score
+    data[i, "knn_indices"] <- as.character(paste(knn_indices, collapse = ","))
+    data[i, "knn_distances"] <- as.character(paste(round(distances[knn_indices], 2), collapse = ","))
+    data[i, "knn_number"] <- k
+    
+  }
+  
+  # Return the updated data frame
+  return(data)
+}
+
+
+plot_knn <- function(data, cols = c("x", "y"), knn_col = "knn_indices", k = 3, highlight_obs = NULL, highlight_color = "red", highlight_width = 2.5) {
+  # Function to plot K-nearest neighbors for each row of a dataframe
+# Args:
+#   data: dataframe with the data to use for finding the nearest neighbors
+#   k: number of nearest neighbors to plot
+#   cols: vector of two column names that represent the x and y coordinates to use for plotting
+# Returns:
+#   plot of the data with lines connecting each row to its K nearest neighbors
+# Function to plot the K-nearest neighbors for each row of a dataframe
+# Args:
+#   data: dataframe with the data to use for plotting the nearest neighbors
+#   cols: vector of two column names that represent the x and y coordinates to use for the plot
+#   knn_col: the name of the column in the data that contains the nearest neighbor indices
+#   k: number of nearest neighbors to plot
+# Returns:
+#   a ggplot object showing the nearest neighbors for each row of the dataframe
+# Function to plot the K-nearest neighbors of each point in a dataframe
+# Args:
+#   data: dataframe with the data to plot
+#   cols: vector of two column names that represent the x and y coordinates to use for plotting
+#   knn_col: name of the column containing the indices of the nearest neighbors
+#   k: number of nearest neighbors to plot, default is 1
+#   colors: vector of colors to use for plotting the points and edges, default is "blue" for points and "gray" for edges
+# Returns:
+#   a ggplot object with the K-nearest neighbors plotted for each point
+# Function to plot the K-nearest neighbors for each row of a dataframe
+# Args:
+#   data: dataframe with the data to use for plotting the nearest neighbors
+#   cols: vector of two column names that represent the x and y coordinates to use for the plot
+#   knn_col: the name of the column in the data that contains the nearest neighbor indices
+#   k: number of nearest neighbors to plot
+# Returns:
+#   a ggplot object showing the nearest neighbors for each row of the dataframe
+  
+  
+  
+  # Convert column names to indices
+  x_col <- match(cols[1], colnames(data))
+  y_col <- match(cols[2], colnames(data))
+
+  # Create a new dataframe to store the nearest neighbor data
+  nn_data <- data.frame()
+
+  # Loop through each row of the dataframe
+  for (i in 1:nrow(data)) {
+    # Get the x and y values for the current row
+    x_val <- data[i, x_col]
+    y_val <- data[i, y_col]
+
+    # Get the indices of the k nearest neighbors
+    knn_indices <- strsplit(as.character(data[i, knn_col]), ",")[[1]][1:k]
+
+    # Get the x and y values for the nearest neighbors
+    knn_x <- data[as.numeric(knn_indices), x_col]
+    knn_y <- data[as.numeric(knn_indices), y_col]
+
+    # Create a new dataframe with the nearest neighbor data
+    nn_data <- rbind(nn_data, data.frame(x_val, y_val, knn_x, knn_y))
+  }
+
+  # Highlight the specified observations and their connections in a different color
+  if (!is.null(highlight_obs)) {
+    highlight_data <- nn_data[nn_data$x_val %in% data[highlight_obs, x_col] & nn_data$y_val %in% data[highlight_obs, y_col], ]
+    nn_data <- nn_data[!(nn_data$x_val %in% data[highlight_obs, x_col] & nn_data$y_val %in% data[highlight_obs, y_col]), ]
+  } else {
+    highlight_data <- NULL
+  }
+
+  # Create the ggplot object
+  p <- ggplot(nn_data, aes(x = x_val, y = y_val)) +
+    geom_point(color = "black") +
+    geom_segment(aes(xend = knn_x, yend = knn_y), alpha = 0.5, color = "black") +
+    xlim(min(data[, x_col]) - 1, max(data[, x_col]) + 1) +
+    ylim(min(data[, y_col]) - 1, max(data[, y_col]) + 1) +
+    theme_bw() +
+    theme(
+      panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+      aspect.ratio = 1, axis.title = element_text(size = 20, face = "bold"),
+      plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+      axis.text = element_text(size = 16)
+    ) +
+    xlab("X Coordinate") +
+    ylab("Y Coordinate") +
+    ggtitle(paste0("KNN = ", data[1,"knn_number"])) +
+    coord_equal()+
+    scale_x_continuous(labels = scales::label_number(accuracy = NULL)) +
+    scale_y_continuous(labels = scales::label_number(accuracy = NULL))
+
+  # Add highlighted observations and their connections in a different color
+  if (!is.null(highlight_data)) {
+    p <- p +
+      geom_point(data = highlight_data, color = highlight_color) +
+      geom_segment(data = highlight_data, aes(xend = knn_x, yend = knn_y), alpha = 0.5, color = highlight_color, size = highlight_width)
+  }
+
+  # Return the ggplot object
+  return(p)
+}
+
+
+example_output <- find_knn(data = test_df, k = 9, col1 = "x", col2 = "y", dist_metric = "euclidean")
+plot_knn(example_output, cols = c("x", "y"), knn_col = "knn_indices", k = 9, highlight_obs = 5, highlight_color = "blue", highlight_width = 2)
+
+
+# Making loop of KNNs at a particular K where we highlight all oberservations to then make a mmovie/animation to show how the process works
+merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+plot_list <- list()
+all_knn_dfs <- list()
+
+
+
+
+
+
+
+```
+
+```{r gif animation attempt}
+# Set the input file names and output file name
+file_names <- list.files(path ="animated_plots/", pattern = "*.png", full.names = TRUE)
+output_file <- "animation.gif"
+
+# Read the PNG files and create an image list
+image_list <- image_read(file_names)
+
+# Set the animation parameters
+animation_params <- list(
+  width = 800,
+  height = 800,
+  res = 72,
+  ani.width = 800,
+  ani.height = 800,
+  duration = 1, # duration of each frame in seconds
+  nmax = length(file_names), # number of frames
+  loop = 5, # number of times to loop the animation (0 for infinite)
+  description = "My animation", # optional description
+  dir = getwd(), # directory to save the animation in
+  convert = "convert", # path to the ImageMagick 'convert' executable
+  cmd.fun = NULL, # optional command function to run on each frame
+  extra.opts = "-delay 50 -dispose previous" # additional options for 'convert'
+)
+
+# create the animation
+saveGIF({
+  for (i in 1:length(file_names)) {
+    img <- image_read(file_names[i])
+    image_write(img)
+  }
+}, params = animation_params)
+```
