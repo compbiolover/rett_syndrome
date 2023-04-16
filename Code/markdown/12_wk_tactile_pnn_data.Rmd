@@ -21,21 +21,18 @@ knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/
 
 # Required packages:
 # emmeans: Calculate estimated marginal means for linear models
-# furrr: Parallel processing for R using purrr
 # ggplot2: Create high-quality data visualizations
 # ggpubr: Add additional functionality to ggplot2, such as statistical tests and themes
 # ggsignif: Add significance markers to ggplot2 plots
-# gt: Create high-quality tables with custom formatting and styling
 # ICC: Calculate intraclass correlation coefficients for reliability analysis
 # lme4: Fit linear mixed-effects models to data
 # lmerTest: Calculate p-values and other statistics for linear mixed-effects models
 # magrittr: Add additional functionality to the pipe operator (%>%)
 # mclust: Fit Gaussian mixture models for clustering analysis
-# modelsummary: Create summary tables and graphs for regression models
 # nlme: Fit nonlinear mixed-effects models to data
 # rstatix: Calculate common statistical tests and visualizations in R
 # tidyverse: A collection of R packages for data manipulation and visualization
-# webshot: Take screenshots of web pages from R
+
 
 # Usage:
 # This code should be run at the beginning of any R script that requires one or more of these packages.
@@ -44,15 +41,14 @@ knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/
 
 # Code:
 pacman::p_load(
-  emmeans, furrr, ggplot2, ggpubr, ggsignif, gt, foreach, ICC, lme4,
-  lmerTest, magrittr, mclust, mixtools, modelsummary, mvtnorm, nlme, parallel,
-  purrr, rstatix, tidyverse, webshot
+  emmeans, ggplot2, ggpubr, ggsignif, ICC, lme4,
+  lmerTest, magrittr, mclust, nlme, rstatix, tidyverse
 )
 ```
 
 ## Step 2: Load in data
 ```{r loading data}
-chs_rm <- "n"
+chs_rm <- "y"
 
 # Load the Tactile PNN Histogram Data csv file into a data frame
 tac_data <- read.csv("Data/12_week_tactile_pnn_data/12wk Tactile PNN Histogram Data.csv", header = FALSE)
@@ -79,267 +75,47 @@ if (chs_rm == "n") {
   # Otherwise, remove all columns from the all_data data frame except for 'condition' through 'cohort', and 'ch_10' through 'ch_256'
 } else {
   expr_data <- subset(expr_data, select = c(ch_10:ch_256))
-  writeLines("Intensities 1-9 were removed. Data set is based on intensities 10 through 256")
+  writeLines("Intensities 1-9 were removed. Data set is based on intensities 10-256")
 }
-
 
 all_data <- bind_cols(meta_data, expr_data)
 
-
-# Subset function for the data
-subset_data <- function(data, cohort = NULL, condition = NULL,
-                        hemisphere = NULL, subregion = NULL) {
-  # Description:
-  # This function subsets a given input dataset based on provided filtering criteria, and returns a list of data frames containing all possible
-  # combinations of the filtering variables as separate data frames.
-
-  #   Parameters:
-  # data: Input dataset to be subsetted
-  # cohort: A character vector representing the cohort variable column name in the input dataset. Default is NULL.
-  # condition: A character vector representing the condition variable column name in the input dataset. Default is NULL.
-  # hemisphere: A character vector representing the hemisphere variable column name in the input dataset. Default is NULL.
-  # subregion: A character vector representing the subregion variable column name in the input dataset. Default is NULL.
-
-  # Returns:
-  # A list of data frames, with each data frame representing a unique combination of the filtering criteria.
-
-
-  # Check which arguments are NULL
-  if (is.null(cohort)) cohort <- distinct(data, cohort) %>% pull()
-  if (is.null(condition)) condition <- distinct(data, condition) %>% pull()
-  if (is.null(hemisphere)) hemisphere <- distinct(data, hemisphere) %>% pull()
-  if (is.null(subregion)) subregion <- distinct(data, subregion) %>% pull()
-
-  # Create all possible combinations of filtering criteria
-  filter_combinations <- expand.grid(cohort, condition, hemisphere, subregion)
-
-  # Loop over all combinations and subset the data
-  data_list <- map2(
-    .x = split(
-      seq(nrow(filter_combinations)),
-      rep(1:nrow(filter_combinations), each = 1)
-    ),
-    .y = split(
-      as.data.frame(filter_combinations),
-      rep(1:nrow(filter_combinations), each = 1)
-    ),
-    function(indices, filter_df) {
-      filter(
-        data, cohort == filter_df$Var1[1],
-        condition == filter_df$Var2[1],
-        hemisphere == filter_df$Var3[1],
-        subregion == filter_df$Var4[1]
-      )
-    }
-  )
-
-  names(data_list) <- apply(filter_combinations, 1, paste, collapse = "_")
-
-  return(data_list)
-}
-
-# Generating all possible combinartions of subsets of the data based on
-# subregion, hemisphere, cohort, and condition
-unique_combos <- subset_data(data = all_data)
-
 # Cleaning up intermediate files to keep environment tidy
-rm(unique_combos, tac_data, meta_data)
+rm(tac_data, meta_data)
 ```
 
-
-```{r convert counts to intensities}
-
-
-
-n_intensities <- 256
-
-# # Get unique combinations of cohort, condition, subregion, and hemisphere
-# combinations <- expand.grid(
-#   cohort = unique(all_data$cohort),
-#   condition = unique(all_data$condition),
-#   subregion = unique(all_data$subregion),
-#   hemisphere = unique(all_data$hemisphere)
-# )
-#
-# # Loop over the unique combinations and fit the GMM for each one
-# for (i in 1:nrow(combinations)) {
-#   # Filter the data for the current combination
-#   current_data <- as.data.frame(filter(
-#     all_data,
-#     cohort == combinations[i, "cohort"] &
-#       condition == combinations[i, "condition"] &
-#       subregion == combinations[i, "subregion"] &
-#       hemisphere == combinations[i, "hemisphere"]
-#   ))
-#
-#   intensity_df <- subset(current_data, select = ch_1:ch_256)
-#
-#   # Convert the counts to intensities
-#   intensities <- rep(1:256, times = sum(as.numeric(unlist(intensity_df))))
-#
-#
-#   # Fit the GMM
-#   mod <- densityMclust(intensities, G = 2, plot = TRUE)
-#
-#   # Extract the means and weights
-#   means <- mod$parameters$mean
-#   weights <- mod$parameters$pro
-#
-#   # Create a data frame with the results
-#   results <- data.frame(
-#     mean_1 = means[[1]],
-#     mean_2 = means[[2]],
-#     weight_1 = weights[[1]],
-#     weight_2 = weights[[2]],
-#     cohort = combinations[i, "cohort"],
-#     condition = combinations[i, "condition"],
-#     subregion = combinations[i, "subregion"],
-#     hemisphere = combinations[i, "hemisphere"]
-#   )
-#
-#   # Write the results to a CSV file
-#   file_name <- paste0(
-#     "Outputs/pnn_analysis/density_data_12_wk_tact/",
-#     combinations[i, "cohort"], "_",
-#     combinations[i, "condition"], "_",
-#     combinations[i, "subregion"], "_",
-#     combinations[i, "hemisphere"], ".csv"
-#   )
-#   write.csv(results, file = file_name, row.names = FALSE)
-# }
-
-
-
-
-# Save the results to separate files for each combination of subregion, hemisphere, and cohort
-# for (i in seq_along(results)) {
-#   filename <- sprintf(
-#     "Outputs/pnn_analysis/density_data/%s_%s_%s_12_wk_tact.csv",
-#     results[[i]]$cohort[1], results[[i]]$hemisphere[1], results[[i]]$subregion[1]
-#   )
-#   write.csv(results[[i]], file = filename, row.names = FALSE)
-# }
-
-
-
-
-
-# n_intensities <- 256
-# for (s in unique(all_data$subregion)) {
-#   current_subregion <- filter(all_data, subregion == s)
-#   for (h in unique(current_subregion$hemisphere)) {
-#     current_hemisphere <- filter(current_subregion, hemisphere == h)
-#     for (co in unique(current_hemisphere$cohort)) {
-#       current_cohort <- filter(current_hemisphere, cohort == co)
-#       current_sample <- subset(current_cohort, select = ch_1:ch_256)
-#       current_sample <- as.matrix(current_sample)
-#       gmm_models <- apply(current_sample, 1, function(row) {
-#         # Convert the counts to intensities
-#         intensities <- rep(1:(n_intensities), row)
-#
-#         # Fit the GMM
-#         mod <- densityMclust(intensities, G = 2, plot = TRUE)
-#
-#         # Extract the means and weights
-#         means <- mod$parameters$mean
-#         weights <- mod$parameters$pro
-#         results <- data.frame(
-#           mean_1 = mod$parameters$mean[[1]],
-#           mean_2 = mod$parameters$mean[[2]],
-#           weight_1 = mod$parameters$pro[[1]],
-#           weights_2 = mod$parameters$pro[[2]],
-#           hemisphere = h,
-#           subregion = s,
-#           cohort = co,
-#           condition = current_cohort$condition
-#         )
-#
-#
-#         write.csv(results, file = paste0("Outputs/pnn_analysis/density_data/", co, "_", h, "_", s, "_12_wk_tact.csv"))
-#
-#         return(list(means = means, weights = weights, results = results))
-#       })
-#     }
-#   }
-# }
-# gmm_models <- apply(all_data, 1, function(row) {
-#   for (s in unique(all_data$subregion)) {
-#     current_subregion <- filter(all_data, subregion == s)
-#     for (h in unique(all_data$hemisphere)) {
-#       current_hemisphere <- filter(current_subregion, hemisphere == h)
-#       for (c in unique(all_data$condition)) {
-#         current_cond <- filter(current_hemisphere, condition == c)
-#         for (co in unique(all_data$cohort)) {
-#           current_sample <- filter(current_cond, cohort == co)
-#           for (r in 1:nrow(current_sample)) {
-#             intensities <- rep(1:n_intensities, times = as.vector(unlist(current_sample[r, ])))
-#             mod <- densityMclust(intensities, G = 2)
-#             # Extract the means and weights
-#             means <- mod$parameters$mean
-#             weights <- mod$parameters$pro
-#             res_df <- data.frame(
-#               cohort = co, condition = c,
-#               hemisphere = h, subreigion = s,
-#               mean_1 = mod$parameters$mean[[1]],
-#               mean_2 = mod$parameters$mean[[2]],
-#               weight_1 = mod$parameters$pro[[1]],
-#               weight_2 = mod$parameters$pro[[2]]
-#             )
-#             write.csv(res_df, paste0("Outputs/pnn_analysis/density_data/12_wk_tact_", co, "_", h, "_", c, "_", s, ".csv"))
-#             return(list(means = means, weights = weights))
-#           }
-#         }
-#       }
-#     }
-#   }
-# })
-# Convert the counts to intensities
-#   intensities <- rep(1:n_intensities, row)
-#
-#   # Fit the GMM
-#   mod <- densityMclust(intensities, G = 2)
-#
-#   # Extract the means and weights
-#   means <- mod$parameters$mean
-#   weights <- mod$parameters$pro
-#   return(list(means = means, weights = weights))
-# })
-
-# Print the means and weights for the first 5 rows
-for (i in 1:5) {
-  cat(sprintf("Row %d:\n", i))
-  cat(sprintf("  Mean 1: %.2f\n", gmm_models[[i]]$means[1]))
-  cat(sprintf("  Mean 2: %.2f\n", gmm_models[[i]]$means[2]))
-  cat(sprintf("  Weight 1: %.2f\n", gmm_models[[i]]$weights[1]))
-  cat(sprintf("  Weight 2: %.2f\n", gmm_models[[i]]$weights[2]))
-}
-
-#
-# all_plot_data <- read_files(folder_path = "Outputs/pnn_analysis/density_data/", pattern = "*.csv")
-```
-
-```{r}
-for (s in unique(all_data$subregion)){
+```{r gmm fit}
+for (s in unique(all_data$subregion)) {
   current_subregion <- filter(all_data, subregion == s)
-  for (h in unique(all_data$hemisphere)){
+  for (h in unique(all_data$hemisphere)) {
     current_hemisphere <- filter(current_subregion, hemisphere == h)
-    for (co in unique(current_hemisphere$cohort)){
+    for (co in unique(current_hemisphere$cohort)) {
       current_cohort <- filter(current_hemisphere, cohort == co)
-      for (c in unique(current_cohort$condition)){
-        current_sample <- filter(current_cohort, condition == c)
-        intensity_sample <- subset(current_sample, select = ch_1:ch_256)
-        for (r in 1:nrow(intensity_sample)){
-          intensities <- rep(1:256, times = as.vector(unlist(intensity_sample[r,])))
-          mod <- densityMclust(intensities, G = 2, plot = FALSE)
-          res_df <- data.frame(condition = c,
-                               cohort = co,
-                               hemisphere = h,
-                               subregion = s,
-                               mean_1 = mod$parameters$mean[[1]],
-                               mean_2 = mod$parameters$mean[[2]],
-                               weight_1 = mod$parameters$pro[[1]],
-                               weight_2 = mod$parameters$pro[[2]])
-          write.csv(res_df, paste0("Outputs/pnn_analysis/density_data/", c, "_", h, "_", co, "_", s, ".csv"))
+      for (c in unique(current_cohort$condition)) {
+        current_coordinate <- filter(current_cohort, condition == c)
+        for (cor in unique(current_coordinate$coordinates)) {
+          current_sample <- filter(current_coordinate, coordinates == cor)
+          if (chs_rm == "n"){
+            intensity_sample <- subset(current_sample, select = ch_1:ch_256)
+          }else{
+            intensity_sample <- subset(current_sample, select = ch_10:ch_256)
+          }
+          for (r in 1:nrow(intensity_sample)) {
+            intensities <- rep(1:256, times = as.vector(unlist(intensity_sample[r, ])))
+            mod <- densityMclust(intensities, G = 2, plot = FALSE)
+            res_df <- data.frame(
+              condition = c,
+              cohort = co,
+              hemisphere = h,
+              subregion = s,
+              coordinates = cor,
+              mean_1 = mod$parameters$mean[[1]],
+              mean_2 = mod$parameters$mean[[2]],
+              weight_1 = mod$parameters$pro[[1]],
+              weight_2 = mod$parameters$pro[[2]]
+            )
+            write.csv(res_df, paste0("Outputs/pnn_analysis/density_data/", c, "_", h, "_", co, "_", s, "_", cor, "_intensities_removed.csv"))
+          }
         }
       }
     }
@@ -358,9 +134,8 @@ read_files <- function(folder_path, pattern) {
 
 
 all_plot_data <- read_files(folder_path = "Outputs/pnn_analysis/density_data/", pattern = "*.csv")
-all_plot_data <- all_plot_data%>%
+all_plot_data <- all_plot_data %>%
   select(-X)
-
 ```
 
 
@@ -385,9 +160,16 @@ get_annotations <- function(p_value) {
 
 plot_pnn_violin <- function(data, subregion_val, depen_var, hemisphere_val, save_plot = TRUE, plot_name = "plot.png", plot_dpi = 600, plot_device = "png", plot_path = "Outputs/pnn_analysis/density_plots_12_wk_tact/", plot_height = 12, plot_width = 12) {
   # Filter the data for the subregion and hemisphere, and select columns of interest
-  subregion_data <- data %>%
+  if (!is.null(hemisphere_val)){
+    subregion_data <- data %>%
     filter(subregion == subregion_val & hemisphere == hemisphere_val) %>%
     select(cohort, condition, subregion, hemisphere, depen_var)
+  }else{
+    subregion_data <- data %>%
+    filter(subregion == subregion_val) %>%
+    select(cohort, condition, subregion, hemisphere, depen_var)
+    hemisphere_val <- "Combined"
+  }
 
   # Fit the linear mixed-effects model
   lme_model <- lmer(as.formula(paste0(depen_var, " ~ condition + (1|cohort)")), data = subregion_data)
@@ -457,7 +239,7 @@ plot_pnn_violin <- function(data, subregion_val, depen_var, hemisphere_val, save
     geom_signif(
       comparisons = list(c("WT", "Het")),
       size = 1.25,
-      textsize = 3.88, 
+      textsize = 3.88,
       tip_length = 0.00,
       annotations = get_annotations(p_value)
     ) +
@@ -473,15 +255,32 @@ plot_pnn_violin <- function(data, subregion_val, depen_var, hemisphere_val, save
   return(pnn_plot)
 }
 
+plot_ext <- "svg"
+
 all_plots <- list()
 counter <- 1
 for (sr in unique(all_plot_data$subregion)) {
   for (h in unique(all_plot_data$hemisphere)) {
-    all_plots[[counter]] <- plot_pnn_violin(data = all_plot_data, subregion_val = paste0(sr), depen_var = "mean_2", hemisphere_val = paste0(h), save_plot = TRUE, plot_dpi = 600, plot_device = "svg", plot_name = paste0("plot_", sr, "_", h, "_2_comp_gmm_mean2.png"), plot_path = "Outputs/pnn_analysis/density_plots/png/", plot_height = 10, plot_width = 10)
+    all_plots[[counter]] <- plot_pnn_violin(data = all_plot_data, subregion_val = paste0(sr), depen_var = "mean_1", hemisphere_val = paste0(h), save_plot = TRUE, plot_dpi = 600, plot_device = "svg", plot_name = paste0("plot_", sr, "_", h, "_2_comp_gmm_mean1.", plot_ext), plot_path = "Outputs/pnn_analysis/density_plots/", plot_height = 11, plot_width = 11)
     counter <- counter + 1
   }
 }
 
 combo_plot <- ggarrange(plotlist = all_plots, ncol = 4, nrow = 4, labels = "AUTO", font.label = list(size = 16), align = "hv", common.legend = TRUE, legend = "bottom")
-ggsave(plot = combo_plot, device = "png", path = "~/Desktop/", units = "in", width = 20, height = 20, bg = "white", filename = "combo_plot_2_comp_gmm_mean2_corrected.png", dpi = 600)
+ggsave(plot = combo_plot, device = plot_ext, path = "~/Desktop/", units = "in", width = 22, height = 22, bg = "white", filename = paste0("combo_plot_2_comp_gmm_mea1_corrected_hemispheres.", plot_ext), dpi = 600)
 ```
+
+
+```{r just subregion no hemisphere specific comparisons}
+all_plots <- list()
+plot_ext <- "svg"
+counter <- 1
+for (sr in unique(all_plot_data$subregion)) {
+  all_plots[[counter]] <- plot_pnn_violin(data = all_plot_data, subregion_val = paste0(sr), depen_var = "mean_1", hemisphere_val = NULL, save_plot = TRUE, plot_dpi = 600, plot_device = plot_ext, plot_name = paste0("plot_", sr, "_ _2_comp_gmm_mean1.", plot_ext), plot_path = "Outputs/pnn_analysis/density_plots/", plot_height = 11, plot_width = 11)
+  counter <- counter + 1
+}
+
+combo_plot <- ggarrange(plotlist = all_plots, ncol = 4, nrow = 2, labels = "AUTO", font.label = list(size = 16), align = "hv", common.legend = TRUE, legend = "bottom")
+ggsave(plot = combo_plot, device = plot_ext, path = "~/Desktop/", units = "in", width = 22, height = 22, bg = "white", filename = paste0("combo_plot_2_comp_gmm_mean1_corrected_combined_hemisphere.", plot_ext), dpi = 600)
+```
+
