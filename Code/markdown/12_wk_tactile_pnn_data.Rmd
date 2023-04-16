@@ -101,7 +101,11 @@ for (s in unique(all_data$subregion)) {
             intensity_sample <- subset(current_sample, select = ch_10:ch_256)
           }
           for (r in 1:nrow(intensity_sample)) {
-            intensities <- rep(1:256, times = as.vector(unlist(intensity_sample[r, ])))
+            if (chs_rm == "n"){
+              intensities <- rep(1:256, times = as.vector(unlist(intensity_sample[r, ])))
+            }else{
+              intensities <- rep(10:256, times = as.vector(unlist(intensity_sample[r, ])))
+            }
             mod <- densityMclust(intensities, G = 2, plot = FALSE)
             res_df <- data.frame(
               condition = c,
