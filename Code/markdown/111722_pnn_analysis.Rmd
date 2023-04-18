@@ -13,7 +13,8 @@ knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/
 
 ## Step 1: Load needed packages
 ```{r loading packages}
-pacman::p_load(ComplexHeatmap, cowplot, circlize,
+pacman::p_load(
+  ComplexHeatmap, cowplot, circlize,
   emmeans, ggplot2, ggpubr, ggsignif, ICC, lme4,
   lmerTest, magrittr, matrixcalc, mclust, nlme, rstatix, tidyverse
 )
@@ -21,7 +22,7 @@ pacman::p_load(ComplexHeatmap, cowplot, circlize,
 ## Step 2: Load in data
 ```{r loading data}
 # Set input parameters
-chs_rm <- "n"   # Whether or not to remove certain channels (default is no)
+chs_rm <- "y" # Whether or not to remove certain channels (default is no)
 
 # Read in the data from a CSV file
 pnn_data <- read.csv("Data/111722_pnn_histogram_data/111722_pnn_histogram_data_complete.csv", sep = ",", stringsAsFactors = FALSE)
@@ -35,9 +36,11 @@ rownames(meta_data) <- NULL
 colnames(meta_data) <- c("date", "cohort", "condition", "coordinates", "hemisphere", "subregion", "rotation_x", "rotation_y", "z_position", "area", "author")
 
 # Clean up the metadata
-meta_data$cohort <- str_replace_all(meta_data$cohort, "#", "")  # Remove pound sign from cohort column
-meta_data$author <- str_replace_all(meta_data$author,    # Clean up author names by removing digits and abbreviating names
-  c("[0123456789]" = "", "LD\\." = "LD", "JM\\." = "JM", "RS\\." = "RS", "LD..." = "LD", "JM..." = "JM", "RS..." = "RS"))
+meta_data$cohort <- str_replace_all(meta_data$cohort, "#", "") # Remove pound sign from cohort column
+meta_data$author <- str_replace_all(
+  meta_data$author, # Clean up author names by removing digits and abbreviating names
+  c("[0123456789]" = "", "LD\\." = "LD", "JM\\." = "JM", "RS\\." = "RS", "LD..." = "LD", "JM..." = "JM", "RS..." = "RS")
+)
 
 # Extract the expression data from the data and restructure it
 expr_data <- t(pnn_data[11:266, 2:2981])
@@ -56,7 +59,6 @@ if (chs_rm == "n") {
   rownames(all_data) <- paste0("sample_", 1:nrow(all_data))
   writeLines("Intensities 1-9 were removed from the data set.")
 }
-
 ```
 ## Step 3a: Mclust
 ```{r mclust analysis}
@@ -70,15 +72,15 @@ for (s in unique(all_data$subregion)) {
         current_coordinate <- filter(current_cohort, condition == c)
         for (cor in unique(current_coordinate$coordinates)) {
           current_sample <- filter(current_coordinate, coordinates == cor)
-          if (chs_rm == "n"){
+          if (chs_rm == "n") {
             intensity_sample <- subset(current_sample, select = ch_1:ch_256)
-          }else{
+          } else {
             intensity_sample <- subset(current_sample, select = ch_10:ch_256)
           }
           for (r in 1:nrow(intensity_sample)) {
-            if (chs_rm == "n"){
+            if (chs_rm == "n") {
               intensities <- rep(1:256, times = as.vector(unlist(intensity_sample[r, ])))
-            }else{
+            } else {
               intensities <- rep(10:256, times = as.vector(unlist(intensity_sample[r, ])))
             }
             mod <- densityMclust(intensities, G = 2, plot = FALSE)
@@ -93,7 +95,7 @@ for (s in unique(all_data$subregion)) {
               weight_1 = mod$parameters$pro[[1]],
               weight_2 = mod$parameters$pro[[2]]
             )
-            write.csv(res_df, paste0("Outputs/pnn_analysis/density_data/", c, "_", h, "_", co, "_", s, "_", cor, "_111722.csv"))
+            write.csv(res_df, paste0("Outputs/pnn_analysis/density_data/111722/", c, "_", h, "_", co, "_", s, "_", cor, "_111722_intensities_removed.csv"))
           }
         }
       }
@@ -124,7 +126,7 @@ if (gmm_n == 1 & chs_rm == "n") {
   icc_df <- bind_rows(files_list)
   icc_df <- subset(icc_df, select = c("condition", "hemisphere", "subregion", "author", "rotation_x", "area", "rotation_y", "mean_1"))
 } else if (gmm_n == 2 & chs_rm == "n") {
-  all_files <- list.files("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/", pattern = "sample_[0-9]_*_[A-Z]" )
+  all_files <- list.files("Outputs/pnn_analysis/density_data/two_cluster/no_chs_removed/", pattern = "sample_[0-9]_*_[A-Z]")
   files_list <- vector("list", length = length(all_files))
 
   for (f in all_files) {
@@ -219,7 +221,7 @@ gtsave(fp_table, path = "Outputs/pnn_analysis/p_value_analysis/", filename = "p_
 ```
 ## Step 5: T-tests with ComplexHeatmap
 ```{r complex heatmap}
-test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5"), c("NW", "NH", "SW P0-P1", "SW P0-P5", "SH P0-P1", "SH P0-P5")))
+test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5"), c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5")))
 
 comparisons <- list()
 my_estimates <- list()
@@ -236,6 +238,7 @@ for (c in colnames(test_mat)) {
   }
 }
 
+# Function to read in the finished files from Mclust
 read_files <- function(folder_path, pattern) {
   # Get a list of all files in the folder that match the pattern
   file_list <- list.files(path = folder_path, pattern = pattern, full.names = TRUE)
@@ -249,7 +252,11 @@ read_files <- function(folder_path, pattern) {
 
 all_plot_data <- read_files(folder_path = "Outputs/pnn_analysis/density_data/111722/", pattern = "*.csv")
 all_plot_data <- all_plot_data %>%
-  select(-X)
+  select(-X) %>%
+  mutate(condition = ifelse(condition == "SH P0-P1", "SHP1", condition)) %>%
+  mutate(condition = ifelse(condition == "SH P0-P5", "SHP5", condition)) %>%
+  mutate(condition = ifelse(condition == "SW P0-P1", "SWP1", condition)) %>%
+  mutate(condition = ifelse(condition == "SW P0-P5", "SWP5", condition))
 
 
 for (s in unique(all_plot_data$subregion)) {
@@ -290,33 +297,52 @@ for (s in unique(all_plot_data$subregion)) {
   indicies_to_rep <- which(lower_estimates == 0.000, arr.ind = TRUE)
   indices_to_use_in_upper <- which(upper_estimates != 0.000, arr.ind = TRUE)
   lower_estimates[indicies_to_rep] <- upper_estimates[indices_to_use_in_upper]
+  
+  
+  p1 <- Heatmap(matrix = lower_estimates, show_heatmap_legend = TRUE,
+                heatmap_legend_param = list(title = "Delta Means (x-y)",
+                                            title_gp = gpar(fontsize = 16,
+                                                            fontface = "bold"),
+                                            direction = "horizontal", 
+                                            title_position = "topcenter",
+                                            labels_gp = gpar(fontsize = 14, fontface = "bold")),
+                cluster_rows = FALSE,
+                cluster_columns = FALSE,
+                row_names_side = "left",
+                column_names_centered = TRUE,
+                column_names_rot = 45,
+                row_order = c("SHP5", "SHP1", "SWP5", "SWP1", "NH", "NW"), 
+                row_title_gp = gpar(fontsize = 20, fontface = "bold"),
+                row_names_gp = gpar(fontsize = 16, fontface = "bold"), 
+                na_col = "white", column_names_gp = gpar(fontsize = 16,
+                                                         fontface = "bold"), 
+                column_title = paste0(s, " | Mean 2"), 
+                column_title_gp = gpar(fontsize = 22, fontface = "bold"),
+                cell_fun = function(j, i, x, y, width, height, fill) {
+    if (my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17] < 0.05) {
+      grid.text(sprintf("%s", my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17]), x, y, gp = gpar(fontsize = 16))
+    }
+  }, rect_gp = gpar(color = "black"))
+  
+  p1 <- p1%>%
+  draw(heatmap_legend_side = "bottom")
 
-  if (s == "MOs") {
-    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), na_col = "white", row_names_gp = gpar(fontsize = 5, fontface = "bold"), column_names_gp = gpar(fontsize = 5, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
-      if (my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17] < 0.05) {
-        grid.text(sprintf("%s", my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17]), x, y, gp = gpar(fontsize = 10))
-      }
-    }, rect_gp = gpar(color = "black"))
-  } else {
-    p1 <- Heatmap(matrix = lower_estimates, heatmap_legend_param = list(title = "Difference in Means\n(x-y)"), cluster_rows = FALSE, cluster_columns = FALSE, row_names_side = "left", column_names_centered = TRUE, column_names_rot = 0, row_order = c("SH P0-P5", "SH P0-P1", "SW P0-P5", "SW P0-P1", "NH", "NW"), row_names_gp = gpar(fontsize = 5, fontface = "bold"), na_col = "white", column_names_gp = gpar(fontsize = 5, fontface = "bold"), column_title = paste0(s, " | Mean 2"), cell_fun = function(j, i, x, y, width, height, fill) {
-      if (my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17] < 0.05) {
-        grid.text(sprintf("%s", my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17]), x, y, gp = gpar(fontsize = 10))
-      }
-    }, rect_gp = gpar(color = "black"))
-  }
 
-
-
-
-  png(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap.png"), units = "in", width = 5, height = 0.3937 * 6 + 0.7423, res = 600)
+  png(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap_mean2.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
   p1 <- draw(p1, height = unit(1, "cm") * 6)
   draw(p1, height = unit(1, "cm") * 6)
   dev.off()
+  
+  # png(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap_mean2.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
+  # p1 <- draw(p1)
+  # draw(p1)
+  # dev.off()
+
 
   p1 <- grid.grabExpr(draw(p1))
   plots[[s]] <- p1
 }
 
-combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO")
-save_plot(filename = "Outputs/pnn_analysis/heatmaps/combo_plot_complexheatmap.png", plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.1, bg = "white")
+combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO", label_size = 18)
+save_plot(filename = "Outputs/pnn_analysis/heatmaps/combo_plot_complexheatmap_mean2.png", plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
 ```
