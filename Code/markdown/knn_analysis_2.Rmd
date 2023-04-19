@@ -140,7 +140,7 @@ ggsave(filename = "spatial_plot.png", plot = p1, units = "in", width = 24, heigh
 ```
 ## KNN analysis 
 ```{r knn functions}
-nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, intensity_df = my_x, use_p_only = TRUE, mean_neighborhood_intensity = TRUE) {
+nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, intensity_df = my_x, use_p_only = TRUE, mean_neighborhood_intensity = FALSE) {
   obs_to_remove <- c()
   # Check the number of observations is the same
   if (ncol(x) != ncol(obs)) {
@@ -375,7 +375,8 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = FALSE)[[1]]
+
     my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
       my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
@@ -487,7 +488,7 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = FALSE)[[1]]
     my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
       my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
@@ -690,12 +691,25 @@ ggsave(
 ```{r doing intensity vs mean intensity of  + neighbors correlation analysis}
 p_score <- 0
 n_score <- 0
-k_n <- 21
+k_n <- 3
+file_type_used <- "svg"
 # pearson, kendall, or spearman
 stat_used <- "spearman"
 # reg.line or loess
 fit_line <- "reg.line"
 using_intensity <- FALSE
+
+# three_d_data <- read.csv("Data/Jacob/3d6WOdataset.csv")
+# three_d_data <- three_d_data %>%
+#   select(image, Name, Mean, CX..pix., CY..pix., CZ..pix.) %>%
+#   rename_all(tolower) %>%
+#   rename(
+#     x = cx..pix.,
+#     y = cy..pix.,
+#     z = cz..pix.
+#   ) %>%
+#   mutate(hemisphere = str_extract(image, "(LH|RH)")) %>%
+#   mutate(condition = str_extract(image, "(NW|NH|SW|SH)"))
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -720,6 +734,7 @@ merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G15
 merged_df <- merged_df %>% group_by(image)
 # Filtering to just P annotated cells
 merged_df <- filter(merged_df, mecp2_p == "P")
+
 all_imgs <- merged_df %>% group_split(merged_df)
 
 img_means <- c()
@@ -730,7 +745,7 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = k_n, FUN = euclidean_distance, use_intensity = FALSE)
+    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = k_n, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = TRUE, mean_neighborhood_intensity = TRUE)
     img_means <- c(img_means, current_cell_neighbor_mean)
     current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
   }
@@ -788,9 +803,11 @@ p3 <- p2 + stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~"))
 ```{r each condition neighborhood analysis knn}
 plots <- list()
 
+
 for (c in unique(mean_neighbor_df$condition_spec)) {
   current_cond <- filter(mean_neighbor_df, condition_spec == c)
   current_cond_p <- filter(current_cond, mecp2_p == "P")
+  
   # Set ellipse and mean.point to TRUE when doing mixed cell analysis
   # Set them to FALSE for when cells are all N or all P
   # Set alpha to 0.5 when doing mixed group analysis, 1 when cells
@@ -804,10 +821,20 @@ for (c in unique(mean_neighbor_df$condition_spec)) {
     x = "mean", y = "positive_neighborhood_mean",
     conf.int = TRUE,
     cor.coef = TRUE,
+    cor.coeff.args = list(
+      method = "spearman",
+      label.x = 2000, label.sep = "\n",
+      cor.coef.name = "rho"
+    ),
+    parse = TRUE,
+    cor.coef.size = 10,
     shape = 21,
+    size = 2.5,
     add = fit_line,
-    add.params = list(color = "red",
-                      fill = "red"),
+    add.params = list(
+      color = "red",
+      fill = "red"
+    ),
     repel = TRUE,
     label.rectangle = TRUE,
     color = "black",
@@ -822,53 +849,69 @@ for (c in unique(mean_neighbor_df$condition_spec)) {
 
   # p2 for the single annotation context
   p2 <- ggpar(p1,
-    title = paste0("KNN = ", k_n, " | ", c, " | ", stat_used),
-    font.main = c(16, "bold"),
-    font.x = c(14, "bold"),
-    font.y = c(14, "bold"),
+    title = paste0("KNN = ", k_n, " | ", c, " | ", str_to_title(stat_used)),
+    font.main = c(20, "bold"),
+    font.x = c(18, "bold"),
+    font.y = c(18, "bold"),
     ggtheme = theme(plot.title = element_text(hjust = 0.5))
   )
 
-  # p2 <- ggpar(p1,
-  #   legend = "none",
-  #   legend.title = "MECP2\nStatus",
-  #   palette = c("#4682b4", "#F4A460"),
-  #   title = paste0("KNN = ", k_n, " | ", c, " | Spearman"),
-  #   font.main = c(16, "bold"),
-  #   font.x = c(14, "bold"),
-  #   font.y = c(14, "bold"),
-  #   ggtheme = theme(plot.title = element_text(hjust = 0.5))
-  # )
+  p2 <- p2 +
+    theme(
+      axis.line = element_line(linewidth = 1.5, lineend = "round"),
+      axis.text = element_text(size = 18), axis.ticks = element_line(linewidth = 0.2)
+    ) +
+    scale_x_continuous(limits = c(0, 4500)) +
+    scale_y_continuous(limits = c(0, 2500))
 
-  # Change to current_cond_p for p-cell only analysis in mixed neighborhoods
-  # Change to current_cond for when there are only p-cells in the dataset
-  # p3 <- p2 + stat_cor(aes(label = paste(..rr.label..)),
-  #   label.x = 2500,
-  #   label.y = 3000,
-  #   method = "spearman",
-  #   data = current_cond
-  # )
+  # For adding density-based contours. Comment out if not wanting countours
+  p2 <- p2 +
+    geom_density2d(aes(colour = ..level..), linewidth = 0.7, n = 100)+
+    scale_colour_gradient(low = "blue", high = "red")+
+    theme(legend.position = "none")
+  
 
-  # p4 <- p3 + stat_cor(aes(label = paste(..r.label..)),
-  #   method = "spearman",
-  #   data = current_cond,
-  #   p.accuracy = 0.001,
-  #   r.accuracy = 0.01,
-  #   label.x = 2500,
-  #   label.y = 3150
-  # )
-  #
-  # p5 <- p4 + stat_cor(aes(label = paste(..p.label..)),
-  #   method = "spearman",
-  #   data = current_cond,
-  #   p.accuracy = 0.001,
-  #   r.accuracy = 0.01,
-  #   label.x = 2500,
-  #   label.y = 2850
-  # )
 
-  # Change to p2 when in a single annotation context, p5 otherwise
-  ggsave(plot = p2, filename = paste0("knn_", k_n, "_", c, "_positive_neighborhood_correlation_analysis_p_cells_only_",stat_used,"_only_p_cells_included.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 8, height = 8, units = "in")
+    # p2 <- ggpar(p1,
+    #   legend = "none",
+    #   legend.title = "MECP2\nStatus",
+    #   palette = c("#4682b4", "#F4A460"),
+    #   title = paste0("KNN = ", k_n, " | ", c, " | Spearman"),
+    #   font.main = c(16, "bold"),
+    #   font.x = c(14, "bold"),
+    #   font.y = c(14, "bold"),
+    #   ggtheme = theme(plot.title = element_text(hjust = 0.5))
+    # )
+
+    # Change to current_cond_p for p-cell only analysis in mixed neighborhoods
+    # Change to current_cond for when there are only p-cells in the dataset
+    # p3 <- p2 + stat_cor(aes(label = paste(..rr.label..)),
+    #   label.x = 2500,
+    #   label.y = 3000,
+    #   method = "spearman",
+    #   data = current_cond
+    # )
+
+    # p4 <- p3 + stat_cor(aes(label = paste(..r.label..)),
+    #   method = "spearman",
+    #   data = current_cond,
+    #   p.accuracy = 0.001,
+    #   r.accuracy = 0.01,
+    #   label.x = 2500,
+    #   label.y = 3150
+    # )
+    #
+    # p5 <- p4 + stat_cor(aes(label = paste(..p.label..)),
+    #   method = "spearman",
+    #   data = current_cond,
+    #   p.accuracy = 0.001,
+    #   r.accuracy = 0.01,
+    #   label.x = 2500,
+    #   label.y = 2850
+    # )
+
+    # Change to p2 when in a single annotation context, p5 otherwise
+    ggsave(plot = p2, filename = paste0("knn_", k_n, "_", c, "_positive_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included.", file_type_used), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = file_type_used, dpi = 600, width = 8, height = 8, units = "in")
 
   # Change to p2 for single annotation case, p5 otherwise
   plots[[paste0(c)]] <- p2
@@ -884,9 +927,13 @@ combo_plot <- ggarrange(
   nrow = 2,
   labels = "AUTO",
   align = "hv",
-  legend = "right",
-  common.legend = TRUE
+  legend = "none",
+  common.legend = TRUE,
+  font.label = list(
+    size = 18,
+    face = "bold"
+  )
 )
 
-ggsave(plot = combo_plot, filename = paste0("knn_", k_n, "_combo_plot_neighborhood_correlation_analysis_p_cells_only_",stat_used,"_only_p_cells_included.png"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "png", dpi = 600, width = 16, height = 16, units = "in", bg = "white")
+ggsave(plot = combo_plot, filename = paste0("knn_", k_n, "_combo_plot_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included_with_contours.", file_type_used), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = file_type_used, dpi = 600, width = 16, height = 16, units = "in", bg = "white")
 ```
