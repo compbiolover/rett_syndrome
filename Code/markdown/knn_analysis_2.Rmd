@@ -973,6 +973,7 @@ merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G15
 merged_df <- merged_df %>% group_by(image)
 # Filtering to just P annotated cells
 merged_df <- filter(merged_df, mecp2_p == "P")
+# Filtering to just NH and SH cells for the k 1 to k 15 scan
 merged_df <- filter(merged_df, condition_spec == "NH" | condition_spec == "SH")
 all_imgs <- merged_df %>% group_split(merged_df)
 
@@ -1133,39 +1134,146 @@ for (k in k_ns) {
 
 
 ```{r making the k1 to k15 plot}
-k_ns <- seq(1,15,1)
-rhos_nh <- c(0.25,0.42,0.36,0.33,0.37,0.36,0.39,0.38,0.34,0.36,0.39,0.38,0.38,0.35,0.36)
-rhos_sh <- c(0.19, 0.34, 0.33,0.33,0.34,0.34,0.34,0.34,0.37,0.37,0.37,0.40,0.39,0.39,0.38)
-all_rhos <- c(rhos_nh,rhos_sh)
+k_ns <- seq(1, 15, 1)
+rhos_nh <- c(0.25, 0.42, 0.36, 0.33, 0.37, 0.36, 0.39, 0.38, 0.34, 0.36, 0.39, 0.38, 0.38, 0.35, 0.36)
+rhos_sh <- c(0.19, 0.34, 0.33, 0.33, 0.34, 0.34, 0.34, 0.34, 0.37, 0.37, 0.37, 0.40, 0.39, 0.39, 0.38)
+all_rhos <- c(rhos_nh, rhos_sh)
 
 df <- data.frame(k = k_ns, rhos = all_rhos, condition = rep(c("NH", "SH"), each = 15))
 df$k <- as.factor(df$k)
 
 
-p1 <- ggplot(data = df, aes(x = k, y = rhos))+
-  geom_col(width = 0.8, fill = "steelblue")+
-  theme(panel.background = element_blank(),
-        axis.title = element_text(size = 18, face = "bold"),
-        plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-        axis.line = element_line(color = "black", linewidth = 1.5),
-        axis.ticks.length = unit(0.2, units = "cm"),
-        axis.text = element_text(size = 16),
-        legend.position = "bottom",
-        legend.title = element_text(size = 16, face = "bold"),
-        legend.text = element_text(size = 16),
-        strip.text = element_text(size = 16, face = "bold"),
-        )+
+p1 <- ggplot(data = df, aes(x = k, y = rhos)) +
+  geom_col(width = 0.8, fill = "steelblue") +
+  theme(
+    panel.background = element_blank(),
+    axis.title = element_text(size = 18, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.line = element_line(color = "black", linewidth = 1.5),
+    axis.ticks.length = unit(0.2, units = "cm"),
+    axis.text = element_text(size = 16),
+    legend.position = "bottom",
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 16),
+    strip.text = element_text(size = 16, face = "bold"),
+  ) +
   geom_text(aes(label = round(rhos, 2)), vjust = -0.5, size = 8) +
-  facet_wrap(~condition, ncol = 1, nrow = 2)+
-  xlab("K")+
-  ylab(expression(rho))+
-  scale_color_discrete("Condition")+
-  scale_y_continuous(expand = c(0,0), limits = c(0.0, 0.48))
+  facet_wrap(~condition, ncol = 1, nrow = 2) +
+  xlab("K") +
+  ylab(expression(rho)) +
+  scale_color_discrete("Condition") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0.0, 0.48))
 
 p1
 
 ggsave(plot = p1, filename = "rhos_across_k_1_to_15_nh_sh.svg", path = "Outputs/knn_analysis/plots/", device = "svg", height = 9, width = 16, units = "in", dpi = 600)
 
 ggsave(plot = p1, filename = "rhos_across_k_1_to_15_nh_sh.png", path = "Outputs/knn_analysis/plots/", device = "png", height = 9, width = 16, units = "in", dpi = 600)
+```
+
+
+```{r knn random neighbors at k of 3}
+k_ns <- seq(1, 15, 1)
+file_type_used <- "png"
+stat_used <- "spearman"
+fit_line <- "reg.line"
+
+
+naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+
+colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+
+naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
+naive_df_het$condition <- rep("HET", nrow(naive_df_het))
+sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
+sur_df_het$condition <- rep("HET", nrow(sur_df_het))
+
+merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+# Removing a single image because it just is grouped by itself
+merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
+merged_df <- merged_df %>% group_by(image)
+# Filtering to just P annotated cells
+merged_df <- filter(merged_df, mecp2_p == "P")
+# Filtering to just NH and SH cells for the k 1 to k 15 scan
+merged_df <- filter(merged_df, condition_spec == "NH" | condition_spec == "SH")
+all_imgs <- merged_df %>% group_split(merged_df)
+
+# Have to set the seed for reproducibility
+cor_results <- list()
+counter <- 1
+set.seed(123)
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img_sampled <- current_img %>% sample_frac(0.8)
+  for (r in 1:nrow(current_img_sampled)) {
+    current_img_sampled_neigh <- current_img_sampled %>% sample_n(size = 3)
+    current_img_sampled[r, "positive_neighborhood_mean"] <- mean(current_img_sampled_neigh$mean)
+  }
+   cor_res <- cor.test(x = as.numeric(as.vector(unlist(current_img_sampled$mean))), y = as.numeric(as.vector(unlist(current_img_sampled$positive_neighborhood_mean))), method = "spearman")
+ cor_results[[counter]] <- cor_res
+ counter <- counter + 1
+}
+
+```
+
+
+```{r plot the correlations}
+k_rand_df <- data.frame(k = rep(3, times = 8),
+                        condition = rep(c("NH", "SH"), each = 4))
+
+cors <- c()
+for (r in 1:length(cor_results)){
+  current_cor <- cor_results[[r]]
+  cors <- c(cors, as.numeric(as.vector(unlist(current_cor$estimate))))
+}
+
+k_rand_df$rho <- cors
+k_rand_df$condition <- c("NH", "SH", "NH", "SH", "SH", "SH", "NH", "NH")
+
+p1 <- ggplot(data = k_rand_df, aes(x = condition, y = rho, color = condition, fill = condition))+
+  geom_col(position = "dodge", width = 0.3)+
+  theme(panel.background = element_blank(),
+        legend.position = "none",
+        axis.title = element_text(face = "bold", size = 18),
+        axis.text = element_text(size = 16),
+        axis.ticks.length = unit(0.2, units = "cm"),
+        axis.ticks = element_line(linewidth = 1.25),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))+
+  xlab("Condition")+
+  ylab(expression(rho))+
+  ggtitle("K = 3")+
+  scale_fill_discrete(type = c("steelblue", "orange"))+
+  scale_color_discrete(type = c("steelblue", "orange"))+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 1.25)
+
+ggsave(plot = p1, filename = "nh_vs_sh_random_knn_3_vs_rho.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
+
+```
+
+```{r histogram of correlations}
+p1 <- ggplot(data = k_rand_df, aes(x = rho))+
+  geom_histogram()+
+  theme(panel.background = element_blank(),
+        axis.title = element_text(size = 18, face = "bold"),
+        axis.text = element_text(size = 16),
+        axis.ticks = element_line(linewidth = 1.25),
+        axis.ticks.length = unit(0.2, units = "cm"),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+        axis.line = element_line(colour = "black", linewidth = 1.25))+
+  ggtitle("K = 3")+
+  xlab(expression(rho))+
+  ylab("Count")+
+  scale_y_continuous(expand = c(0,0))
+
+ggsave(plot = p1, filename = "nh_vs_sh_random_knn_3_vs_rho_histogram.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
+
 ```
 
