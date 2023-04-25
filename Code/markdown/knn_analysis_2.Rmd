@@ -8,23 +8,45 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")
+
+# `knitr::opts_chunk$set(echo = TRUE)` sets the global chunk option to include the code in the output document, allowing code chunks to be executed and their results displayed.
+# `knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")` sets the working directory for the R Markdown document, which is the directory where all relative file paths will be resolved.
 ```
 
 
 ## Loading packages
 ```{r loading needed packages}
-suppressMessages(library(caret))
-suppressMessages(library(class))
-suppressMessages(library(deldir))
-suppressMessages(library(effectsize))
-suppressMessages(library(ggforce))
-suppressMessages(library(ggpubr))
-suppressMessages(library(ggsignif))
-suppressMessages(library(rstatix))
-suppressMessages(library(readxl))
-suppressMessages(library(reticulate))
-suppressMessages(library(scales))
-suppressMessages(library(tidyverse))
+# Load packages using pacman and add documentation
+
+suppressMessages(pacman::p_load(
+  caret, # Tools for training and evaluating predictive models
+  class, # Functions for nearest neighbor classification
+  deldir, # Delaunay triangulation and Dirichlet (Voronoi) tesselation
+  effectsize, # Functions for calculating standardized effect sizes
+  ggforce, # Additional geometries, stats, scales and themes for ggplot2
+  ggpubr, # Functions for combining multiple ggplots into a single plot
+  ggsignif, # Geometries for adding significance bars to ggplot2 plots
+  rstatix, # Functions for descriptive statistics and statistical tests
+  readxl, # Functions for reading Excel files
+  reticulate, # Interface to Python for calling Python code from R
+  scales, # Functions for scaling and formatting plot axes
+  tidyverse # Collection of packages for data manipulation and visualization
+))
+
+# Documentation:
+
+# - caret: The caret package provides a set of functions for training and evaluating predictive models, including functions for data splitting, pre-processing, feature selection, model tuning, and performance evaluation.
+# - class: The class package provides functions for nearest neighbor classification, including k-nearest neighbor (KNN) classification.
+# - deldir: The deldir package provides functions for computing Delaunay triangulations and Dirichlet (Voronoi) tesselations, which can be used for spatial analysis and modeling.
+# - effectsize: The effectsize package provides functions for calculating standardized effect sizes, which can be used to compare the strength of effects across different studies or datasets.
+# - ggforce: The ggforce package provides additional geometries, stats, scales and themes for ggplot2, which can be used to create more complex and specialized plots.
+# - ggpubr: The ggpubr package provides functions for combining multiple ggplots into a single plot, which can be used to compare and visualize multiple datasets or variables.
+# - ggsignif: The ggsignif package provides geometries for adding significance bars to ggplot2 plots, which can be used to visualize and communicate statistical significance.
+# - rstatix: The rstatix package provides functions for descriptive statistics and statistical tests, including t-tests, ANOVA, and correlation analysis.
+# - readxl: The readxl package provides functions for reading Excel files, which can be used to import data from spreadsheets into R.
+# - reticulate: The reticulate package provides an interface to Python for calling Python code from R, which can be useful for accessing Python libraries or using Python code within R scripts.
+# - scales: The scales package provides functions for scaling and formatting plot axes, which can be used to customize the appearance of plots.
+# - tidyverse: The tidyverse is a collection of packages for data manipulation and visualization, including dplyr, ggplot2, tidyr, and other packages that follow the "tidy" data philosophy.
 ```
 
 ## Loading data
@@ -140,75 +162,64 @@ ggsave(filename = "spatial_plot.png", plot = p1, units = "in", width = 24, heigh
 ```
 ## KNN analysis 
 ```{r knn functions}
-nearest_neighbors <- function(x, obs, k, FUN, p = NULL, use_intensity = TRUE, intensity_df = my_x, use_p_only = TRUE, mean_neighborhood_intensity = FALSE) {
-  obs_to_remove <- c()
+#' Nearest neighbors function with options to calculate mean neighborhood intensity
+#'
+#' @param data A data frame or matrix of predictor variables for the neighbors (required)
+#' @param observation A data frame or matrix of predictor variables for the observation of interest (required)
+#' @param num_neighbors An integer specifying the maximum number of nearest neighbors to find (required)
+#' @param distance_func A function to calculate distance between neighbors (e.g., euclidean_distance) (required)
+#' @param p_val An optional numeric value for Minkowski distance calculation (default: NULL)
+#' @param apply_intensity A logical indicating if intensity information should be used (default: TRUE)
+#' @param intensity_data A data frame or matrix containing intensity information (default: my_x)
+#' @param p_only A logical indicating if only 'P' neighbors should be used (default: TRUE)
+#' @param calc_mean_intensity A logical indicating if the mean intensity of the neighborhood should be calculated (default: FALSE)
+#' @param custom_neighbors An optional numeric vector of pre-selected neighbor indices (default: NULL)
+#' @param random_num_neighbors A logical indicating if the function should select a random number of neighbors equal to k (default: FALSE)
+#' @return A list containing information about the nearest neighbors:
+#'         - neighbor_indices: Numeric vector of neighbor indices
+#'         - distances: Numeric vector of distances between the observation and neighbors
+#'         - mean_distance: Mean of the updated distances
+#'         - distances_updated: Numeric vector of updated distances considering intensity information
+nearest_neighbors <- function(data, observation, num_neighbors, distance_func, p_val = NULL, apply_intensity = TRUE, intensity_data = my_x, p_only = TRUE, calc_mean_intensity = FALSE, custom_neighbors = NULL, random_num_neighbors = FALSE) {
   # Check the number of observations is the same
-  if (ncol(x) != ncol(obs)) {
+  if (ncol(data) != ncol(observation)) {
     stop("Data must have the same number of variables")
   }
 
   # Calculate distance, considering p for Minkowski
-  if (is.null(p)) {
-    dist <- apply(x, 1, FUN, obs)
+  dist <- if (is.null(p_val)) apply(data, 1, distance_func, observation) else apply(data, 1, distance_func, observation, p_val)
+
+  # Select neighbors and determine distances
+  if (random_num_neighbors) {
+    neighbor_indices <- sample(nrow(data), num_neighbors)
+  } else if (!is.null(custom_neighbors)) {
+    neighbor_indices <- custom_neighbors
   } else {
-    dist <- apply(x, 1, FUN, obs, p)
+    neighbor_indices <- which(dist %in% sort(dist)[1:num_neighbors])
   }
+  distances <- dist[neighbor_indices]
 
-  # Find closest neighbors
-  distances <- sort(dist)[1:k]
+  # Calculate distances with intensity information
+  if (apply_intensity) {
+    intensity_info <- intensity_data[neighbor_indices, ]
+    distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
 
-  if (k == 1) {
-    neighbor_ind <- which(dist %in% sort(dist)[1])
-  } else {
-    neighbor_ind <- which(dist %in% sort(dist)[1:k])
-  }
-
-  if (length(neighbor_ind) != k) {
-    warning(
-      paste("Several variables with equal distance. Used k:", length(neighbor_ind), "\n")
-    )
-    print(neighbor_ind)
-    neighbor_ind <- neighbor_ind[1]
-    print(neighbor_ind)
-  }
-
-  if (use_intensity == TRUE & use_p_only == FALSE) {
-    intensity_info <- intensity_df
-    intensity_info <- intensity_info[neighbor_ind, ]
-    distances_updated <- distances * intensity_info$mean
-    distances_updated <- rescale(distances_updated, to = c(0, 1))
-    ret <- list(neighbor_ind, distances)
-  } else if (use_intensity == TRUE & use_p_only == TRUE) {
-    intensity_info <- intensity_df
-    intensity_info <- intensity_info[neighbor_ind, ]
-    intensity_info <- filter(intensity_info, mecp2_p == "P")
-    distances <- distances[1:nrow(intensity_info)]
-    if (nrow(intensity_info) == 0) {
-      writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-      obs_to_remove <- c(obs, obs_to_remove)
-      ret <- list(0, 0, 0, 0)
-      return(ret)
-    } else {
-      distances_updated <- distances * intensity_info$mean
-      distances_updated <- rescale(distances_updated, to = c(0, 1))
-      additional_score <- mean(distances_updated)
-      ret <- list(neighbor_ind, distances, additional_score, distances_updated)
+    if (p_only) {
+      intensity_info <- filter(intensity_info, mecp2_p == "P")
+      if (nrow(intensity_info) == 0) {
+        writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
+        return(list(NA))
+      }
     }
   }
-  if (mean_neighborhood_intensity == TRUE) {
-    intensity_info <- intensity_df
-    intensity_info <- intensity_info[neighbor_ind, ]
-    intensity_info <- filter(intensity_info, mecp2_p == "P")
-    if (nrow(intensity_info) == 0) {
-      writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-      obs_to_remove <- c(obs, obs_to_remove)
-      ret <- list(NA)
-      return(ret)
-    } else {
-      mean_of_neighbors <- mean(intensity_info$mean)
-      ret <- mean_of_neighbors
-    }
+
+  # Calculate mean neighborhood intensity
+  if (calc_mean_intensity) {
+    ret <- mean(intensity_info$mean)
+  } else {
+    ret <- list(neighbor_indices, distances, mean(distances_updated), distances_updated)
   }
+
   return(ret)
 }
 
@@ -562,6 +573,7 @@ ggsave(
   units = "in"
 )
 ```
+
 ```{r knn analysis with 21 neighbors}
 p_score <- 0
 n_score <- 0
@@ -1172,7 +1184,7 @@ ggsave(plot = p1, filename = "rhos_across_k_1_to_15_nh_sh.png", path = "Outputs/
 ```
 
 
-```{r knn random neighbors at k of 3}
+```{r knn random neighbors at k of 5}
 k_ns <- seq(1, 15, 1)
 file_type_used <- "png"
 stat_used <- "spearman"
@@ -1217,20 +1229,21 @@ for (i in 1:length(all_imgs)) {
     current_img_sampled_neigh <- current_img_sampled %>% sample_n(size = 3)
     current_img_sampled[r, "positive_neighborhood_mean"] <- mean(current_img_sampled_neigh$mean)
   }
-   cor_res <- cor.test(x = as.numeric(as.vector(unlist(current_img_sampled$mean))), y = as.numeric(as.vector(unlist(current_img_sampled$positive_neighborhood_mean))), method = "spearman")
- cor_results[[counter]] <- cor_res
- counter <- counter + 1
+  cor_res <- cor.test(x = as.numeric(as.vector(unlist(current_img_sampled$mean))), y = as.numeric(as.vector(unlist(current_img_sampled$positive_neighborhood_mean))), method = "spearman")
+  cor_results[[counter]] <- cor_res
+  counter <- counter + 1
 }
-
 ```
 
 
 ```{r plot the correlations}
-k_rand_df <- data.frame(k = rep(3, times = 8),
-                        condition = rep(c("NH", "SH"), each = 4))
+k_rand_df <- data.frame(
+  k = rep(3, times = 8),
+  condition = rep(c("NH", "SH"), each = 4)
+)
 
 cors <- c()
-for (r in 1:length(cor_results)){
+for (r in 1:length(cor_results)) {
   current_cor <- cor_results[[r]]
   cors <- c(cors, as.numeric(as.vector(unlist(current_cor$estimate))))
 }
@@ -1238,42 +1251,169 @@ for (r in 1:length(cor_results)){
 k_rand_df$rho <- cors
 k_rand_df$condition <- c("NH", "SH", "NH", "SH", "SH", "SH", "NH", "NH")
 
-p1 <- ggplot(data = k_rand_df, aes(x = condition, y = rho, color = condition, fill = condition))+
-  geom_col(position = "dodge", width = 0.3)+
-  theme(panel.background = element_blank(),
-        legend.position = "none",
-        axis.title = element_text(face = "bold", size = 18),
-        axis.text = element_text(size = 16),
-        axis.ticks.length = unit(0.2, units = "cm"),
-        axis.ticks = element_line(linewidth = 1.25),
-        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))+
-  xlab("Condition")+
-  ylab(expression(rho))+
-  ggtitle("K = 3")+
-  scale_fill_discrete(type = c("steelblue", "orange"))+
-  scale_color_discrete(type = c("steelblue", "orange"))+
+p1 <- ggplot(data = k_rand_df, aes(x = condition, y = rho, color = condition, fill = condition)) +
+  geom_col(position = "dodge", width = 0.3) +
+  theme(
+    panel.background = element_blank(),
+    legend.position = "none",
+    axis.title = element_text(face = "bold", size = 18),
+    axis.text = element_text(size = 16),
+    axis.ticks.length = unit(0.2, units = "cm"),
+    axis.ticks = element_line(linewidth = 1.25),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
+  ) +
+  xlab("Condition") +
+  ylab(expression(rho)) +
+  ggtitle("K = 3") +
+  scale_fill_discrete(type = c("steelblue", "orange")) +
+  scale_color_discrete(type = c("steelblue", "orange")) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 1.25)
 
 ggsave(plot = p1, filename = "nh_vs_sh_random_knn_3_vs_rho.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
-
 ```
 
 ```{r histogram of correlations}
-p1 <- ggplot(data = k_rand_df, aes(x = rho))+
-  geom_histogram()+
-  theme(panel.background = element_blank(),
-        axis.title = element_text(size = 18, face = "bold"),
-        axis.text = element_text(size = 16),
-        axis.ticks = element_line(linewidth = 1.25),
-        axis.ticks.length = unit(0.2, units = "cm"),
-        plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-        axis.line = element_line(colour = "black", linewidth = 1.25))+
-  ggtitle("K = 3")+
-  xlab(expression(rho))+
-  ylab("Count")+
-  scale_y_continuous(expand = c(0,0))
+p1 <- ggplot(data = k_rand_df, aes(x = rho)) +
+  geom_histogram() +
+  theme(
+    panel.background = element_blank(),
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 16),
+    axis.ticks = element_line(linewidth = 1.25),
+    axis.ticks.length = unit(0.2, units = "cm"),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.line = element_line(colour = "black", linewidth = 1.25)
+  ) +
+  ggtitle("K = 3") +
+  xlab(expression(rho)) +
+  ylab("Count") +
+  scale_y_continuous(expand = c(0, 0))
 
 ggsave(plot = p1, filename = "nh_vs_sh_random_knn_3_vs_rho_histogram.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
-
 ```
 
+
+```{r another attempt at correlation analysis}
+k_n <- 5
+file_type_used <- "png"
+stat_used <- "spearman"
+fit_line <- "reg.line"
+using_intensity <- FALSE
+
+naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+
+colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+
+naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
+naive_df_het$condition <- rep("HET", nrow(naive_df_het))
+sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
+sur_df_het$condition <- rep("HET", nrow(sur_df_het))
+
+merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+# Removing a single image because it just is grouped by itself
+merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
+merged_df <- merged_df %>% group_by(image)
+# Filtering to just P annotated cells
+merged_df <- filter(merged_df, mecp2_p == "P")
+merged_df <- filter(merged_df, condition_spec == "NH")
+all_imgs <- merged_df %>% group_split(merged_df)
+
+
+# Loop for 1000+ times
+all_rhos_stored <- c()
+all_p_values_stored <- c()
+
+for (n in 1:1000) {
+  img_means <- c()
+  for (i in 1:length(all_imgs)) {
+    current_img <- all_imgs[[i]]
+    current_img$positive_neighborhood_mean <- rep(0, nrow(current_img))
+    for (r in 1:nrow(current_img)) {
+      my_obs <- current_img[r, ]
+      my_x <- filter(current_img, id != my_obs$id)
+
+      current_cell_neighbor_mean <- nearest_neighbors(
+        data = my_x[, 7:8],
+        observation = my_obs[, 7:8],
+        num_neighbors = k_n,
+        distance_func = euclidean_distance,
+        apply_intensity = TRUE,
+        p_only = TRUE,
+        random_num_neighbors = TRUE,
+        calc_mean_intensity = TRUE,
+        intensity_data = my_x
+      )
+      img_means <- c(img_means, current_cell_neighbor_mean)
+      current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
+    }
+
+    write.csv(current_img, paste0("Outputs/knn_analysis/data/1000_simulation/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, ".csv"))
+    img_means <- c()
+  }
+
+  all_dfs <- vector(mode = "list", length = 4)
+  for (i in 1:length(all_imgs)) {
+    current_df <- read.csv(paste0("Outputs/knn_analysis/data/1000_simulation/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, ".csv"))
+    all_dfs[[i]] <- current_df
+  }
+
+  mean_neighbor_df <- bind_rows(all_dfs)
+
+
+  # Calculating rho
+  cor_res <- cor.test(x = mean_neighbor_df$mean, y = mean_neighbor_df$positive_neighborhood_mean, method = "spearman")
+  current_p <- cor_res$p.value
+  current_rho <- as.numeric(as.vector(unlist(cor_res$estimate)))
+  all_rhos_stored <- c(current_rho, all_rhos_stored)
+  all_p_values_stored <- c(current_p, all_p_values_stored)
+}
+
+
+
+
+
+# Function to read in all the files and perform all correlation tests
+read_files <- function(folder_path, pattern, combine_all_files = FALSE, perform_cor = TRUE) {
+  # Get a list of all files in the folder that match the pattern
+  file_list <- list.files(path = folder_path, pattern = pattern, full.names = TRUE)
+
+  # Function to read and perform cor.test
+  process_file <- function(file) {
+    data <- read.csv(file)
+
+    if (perform_cor) {
+      cor_res <- cor.test(x = data$mean, y = data$positive_neighborhood_mean, method = "spearman")
+      return(list(data = data, cor_res = cor_res))
+    } else {
+      return(list(data = data))
+    }
+  }
+
+  # Read in all CSV files and perform cor.test if needed
+  file_results <- lapply(file_list, process_file)
+
+  if (combine_all_files) {
+    data <- do.call(rbind, lapply(file_results, function(x) x$data))
+    return(data)
+  } else {
+    return(file_results)
+  }
+}
+
+
+all_nh_k_5_df <- read_files(folder_path = "Outputs/knn_analysis/data/1000_simulation/", pattern = "*.csv", combine_all_files = FALSE, perform_cor = TRUE)
+
+all_rhos_df <- data.frame(
+  k = rep(5, times = 1000),
+  condition = rep("NH", times = 1000),
+  rho = all_rhos_stored, p_value = all_p_values_stored
+)
+```
