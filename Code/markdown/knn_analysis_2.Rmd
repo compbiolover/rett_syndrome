@@ -6,11 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")
-
 # `knitr::opts_chunk$set(echo = TRUE)` sets the global chunk option to include the code in the output document, allowing code chunks to be executed and their results displayed.
 # `knitr::opts_knit$set(root.dir = "~/Documents/Work/PhD_Program/Hong_Lab/Projects/rett_syndrome/")` sets the working directory for the R Markdown document, which is the directory where all relative file paths will be resolved.
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/Work/Phd_program/hong_lab/Projects/rett_syndrome/")
 ```
 
 
@@ -51,35 +50,43 @@ suppressMessages(pacman::p_load(
 
 ## Loading data
 ```{r loading data}
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
-```
+## Read data
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT") %>%
+  rename_all(~ c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")) %>%
+  mutate(condition = "WT")
 
-## Cleaning data
-```{r data cleaning}
-colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET") %>%
+  rename_all(~ c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")) %>%
+  mutate(condition = "HET")
 
-naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
-naive_df_het$condition <- rep("HET", nrow(naive_df_het))
-sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
-sur_df_het$condition <- rep("HET", nrow(sur_df_het))
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT") %>%
+  rename_all(~ c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")) %>%
+  mutate(condition = "WT")
 
-merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
-merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
-merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET") %>%
+  rename_all(~ c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")) %>%
+  mutate(condition = "HET")
+
+## Merge data and create condition_spec variable
+merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het) %>%
+  mutate(condition_spec = str_extract(image, "(NW|NH|SW|SH)")) %>%
+  mutate(condition_spec = factor(condition_spec, levels = c("NW", "SW", "NH", "SH"))) %>%
+  filter(image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
+
+## Grouping the data by images and then splitting them into seperate images for
+## further analysis
+all_imgs <- merged_df %>%
+  group_by(image) %>%
+  group_split(merged_df)
+
+
+## Remove intermediate files to keep environment tidy
+rm(naive_df_het, naive_df_wt, sur_df_het, sur_df_wt)
 ```
 
 
 ## Cell count plot
 ```{r cell count plot}
-merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
-merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
-merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
 p1 <- ggplot(data = merged_df, aes(x = condition_spec, fill = mecp2_p)) +
   geom_bar(position = position_dodge()) +
   theme(
@@ -87,100 +94,124 @@ p1 <- ggplot(data = merged_df, aes(x = condition_spec, fill = mecp2_p)) +
     panel.background = element_blank(),
     axis.text = element_text(size = 22),
     axis.ticks.y = element_blank(),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 28),
-    panel.grid.major.y = element_line(colour = "grey", linetype = "solid")
+    panel.grid.major.y = element_line(colour = "grey", linetype = "solid"),
+    legend.position = "bottom"
   ) +
   xlab("Condition") +
   ylab("Cell Count") +
-  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2_P") +
-  ggtitle("16 Bit Data")
+  scale_fill_manual(values = c("#4682b4", "#F4A460"), name = "MECP2 Status", labels = c("No expression", "Expression"))
 p1
-```
 
-### Saving cell count plot
-```{r saving cell count plot}
+## Saving the plot
 ggsave(
   filename = "Figures/knn_analysis/condition_vs_cell_count.png",
-  plot = print(p1, newpage = FALSE),
+  plot = p1,
   device = "png", dpi = 600,
   width = 7.5, height = 7.5,
   units = "in"
 )
-```
 
+# Removing un-needed plots
+rm(p1)
+```
 
 ```{r spatial plot with each image as plot}
 img_counts <- merged_df %>% count(image)
 
-merged_df$image <- gsub(merged_df$image, pattern = "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23", replacement = "NH_126_z13_23")
-merged_df$image <- gsub(merged_df$image, pattern = "z1-z10_MAX_16-bit_SW-RW9-1.3-Map128_561-60_G150_E100", replacement = "SW_128_z1_10")
-merged_df$image <- gsub(merged_df$image, pattern = "z11-z20_NW-RW10-2.2-Map128_MergedMC", replacement = "NW_128_z11_20")
-merged_df$image <- gsub(merged_df$image, pattern = "z12-z21_SW-LW10-2.1-Map128_MergedMC", replacement = "SW_128_z12_21")
-merged_df$image <- gsub(merged_df$image, pattern = "z13-23_MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100", replacement = "NH_126_z13_23")
-merged_df$image <- gsub(merged_df$image, pattern = "z15-z24_SH-RW10-2.2-Map127_MergedMC", replacement = "SH_127_z15_24")
-merged_df$image <- gsub(merged_df$image, pattern = "z16-z25_MAX_16-bit_NH-RW9-1.2-Map128_561-60_G150_E100", replacement = "NH_128_z16_25")
-merged_df$image <- gsub(merged_df$image, pattern = "z19-z28_SH-LW10-2.2-Map128_MergedMC", replacement = "SH_128_z19_28")
-merged_df$image <- gsub(merged_df$image, pattern = "z23-z32_SH-LW10-1.2-Map128_MergedMC", replacement = "SH_128_z23_32")
-merged_df$image <- gsub(merged_df$image, pattern = "z29-z38_SH-RW10-1.2-Map127_MergedMC", replacement = "SH_127_z29_38")
-merged_df$image <- gsub(merged_df$image, pattern = "z3-z12_MAX_16-bit_SW-LW9-3.2-Map128_561-60_G150_E100", replacement = "SW_128_z3_12")
-merged_df$image <- gsub(merged_df$image, pattern = "z31-z40_MAX_16-bit_NH-LW8-1.2-Map127_561-60_G150_E100", replacement = "NH_127_z31_40")
-merged_df$image <- gsub(merged_df$image, pattern = "z31-z40_NW-LW9-1.2-Map128_MergedMC", replacement = "NW_128_z31_40")
-merged_df$image <- gsub(merged_df$image, pattern = "z41-z50_SW-RW9-1.2-Map128_MergedMC", replacement = "SW_128_z41_50")
-merged_df$image <- gsub(merged_df$image, pattern = "z5-z14_NW-RW10-2.3-Map128_MergedMC", replacement = "NW_128_z5_14")
-merged_df$image <- gsub(merged_df$image, pattern = "z5-z14_NW-RW10-2.3-Map128_MergedMC", replacement = "NW_128_z5_14")
-merged_df$image <- gsub(merged_df$image, pattern = "z6-z15_NW-LW9-1.4-Map128_MergedMC", replacement = "NW_128_z6_15")
-merged_df$image <- gsub(merged_df$image, pattern = "z8-z17_MAX_16-bit_NH-RW9-1.4-Map128_561-60_G150_E100z8-z17", replacement = "NH_128_z8_17")
-merged_df$image <- gsub(merged_df$image, pattern = "z16-z25_MAX_16-bit_NH-RW9-1.2-Map128_561-60_G150_E100", replacement = "NH_128_z16_25")
+merged_df <- merged_df %>%
+  mutate(image = case_when(
+    grepl("MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23", image) ~ "NH_126_z13_23",
+    grepl("z1-z10_MAX_16-bit_SW-RW9-1.3-Map128_561-60_G150_E100", image) ~ "SW_128_z1_10",
+    grepl("z11-z20_NW-RW10-2.2-Map128_MergedMC", image) ~ "NW_128_z11_20",
+    grepl("z12-z21_SW-LW10-2.1-Map128_MergedMC", image) ~ "SW_128_z12_21",
+    grepl("z13-23_MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100", image) ~ "NH_126_z13_23",
+    grepl("z15-z24_SH-RW10-2.2-Map127_MergedMC", image) ~ "SH_127_z15_24",
+    grepl("z16-z25_MAX_16-bit_NH-RW9-1.2-Map128_561-60_G150_E100", image) ~ "NH_128_z16_25",
+    grepl("z19-z28_SH-LW10-2.2-Map128_MergedMC", image) ~ "SH_128_z19_28",
+    grepl("z23-z32_SH-LW10-1.2-Map128_MergedMC", image) ~ "SH_128_z23_32",
+    grepl("z29-z38_SH-RW10-1.2-Map127_MergedMC", image) ~ "SH_127_z29_38",
+    grepl("z3-z12_MAX_16-bit_SW-LW9-3.2-Map128_561-60_G150_E100", image) ~ "SW_128_z3_12",
+    grepl("z31-z40_MAX_16-bit_NH-LW8-1.2-Map127_561-60_G150_E100", image) ~ "NH_127_z31_40",
+    grepl("z31-z40_NW-LW9-1.2-Map128_MergedMC", image) ~ "NW_128_z31_40",
+    grepl("z41-z50_SW-RW9-1.2-Map128_MergedMC", image) ~ "SW_128_z41_50",
+    grepl("z5-z14_NW-RW10-2.3-Map128_MergedMC", image) ~ "NW_128_z5_14",
+    grepl("z5-z14_NW-RW10-2.3-Map128_MergedMC", image) ~ "NW_128_z5_14",
+    grepl("z6-z15_NW-LW9-1.4-Map128_MergedMC", image) ~ "NW_128_z6_15",
+    grepl("z8-z17_MAX_16-bit_NH-RW9-1.4-Map128_561-60_G150_E100z8-z17", image) ~ "NH_128_z8_17",
+    grepl("z16-z25_MAX_16-bit_NH-RW9-1.2-Map128_561-60_G150_E100", image) ~ "NH_128_z16_25",
+    grepl("z19-z28_SH-LW10-2.2-Map128_MergedMC", image) ~ "SH_128_z19_28",
+    grepl("z23-z32_SH-LW10-1.2-Map128_MergedMC", image) ~ "SH_128_z23_32",
+    grepl("z29-z38_SH-RW10-1.2-Map127_MergedMC", image) ~ "SH_127_z29_38",
+    grepl("z3-z12_MAX_16-bit_SW-LW9-3.2-Map128_561-60_G150_E100", image) ~ "SW_128_z3_12",
+    grepl("z31-z40_MAX_16-bit_NH-LW8-1.2-Map127_561-60_G150_E100", image) ~ "NH_127_z31_40",
+    grepl("z31-z40_NW-LW9-1.2-Map128_MergedMC", image) ~ "NW_128_z31_40",
+    grepl("z41-z50_SW-RW9-1.2-Map128_MergedMC", image) ~ "SW_128_z41_50",
+    grepl("z5-z14_NW-RW10-2.3-Map128_MergedMC", image) ~ "NW_128_z5_14",
+    grepl("z6-z15_NW-LW9-1.4-Map128_MergedMC", image) ~ "NW_128_z6_15",
+    grepl("z8-z17_MAX_16-bit_NH-RW9-1.4-Map128_561-60_G150_E100z8-z17", image) ~ "NH_128_z8_17",
+    TRUE ~ image
+  ))
+
+
 
 
 
 p1 <- merged_df %>%
   group_by(image) %>%
-  ggplot(aes(x = x, y = y, fill = condition_spec, color = condition_spec, shape = mecp2_p)) +
-  geom_point() +
+  ggplot(aes(x = x, y = y, fill = condition_spec, color = condition_spec)) +
+  geom_point(size = 3) +
   theme(
     panel.background = element_blank(),
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    axis.title = element_text(face = "bold"),
-    panel.spacing = unit(5, "mm")
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.title = element_text(face = "bold", size = 16),
+    axis.text = element_text(size = 14),
+    panel.spacing = unit(5, "mm"),
+    strip.text = element_text(face = "bold", size = 14),
+    legend.position = "bottom",
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14),
+    panel.border = element_rect(color = "black", fill = NA)
   ) +
   ggtitle("Images") +
   xlab("X (coordinate)") +
   ylab("Y (coordinate)") +
   scale_fill_discrete(name = "Condition") +
   scale_color_discrete(name = "Condition") +
-  scale_shape_discrete(name = "MECP2\nStatus") +
-  facet_grid(. ~ image, scales = "free") +
+  scale_shape_manual(name = "MECP2\nStatus", values = c(15, 16)) + # Change the shapes manually
+  facet_wrap(mecp2_p ~ image, scales = "free", nrow = 8, ncol = 8) +
   scale_y_continuous(expand = c(0.01, 0.01), limits = c(0, 400)) +
   scale_x_continuous(expand = c(0.03, 0.03))
 
 p1
+
+# Saving the plot
+ggsave(filename = "spatial_plot.png", plot = p1, units = "in", width = 22, height = 22, dpi = 600, path = "Outputs/knn_analysis/plots/", device = "png")
+ggsave(filename = "spatial_plot.svg", plot = p1, units = "in", width = 22, height = 22, dpi = 600, path = "Outputs/knn_analysis/plots/", device = "svg")
+rm(p1)
 ```
 
-```{r saving spatial plot}
-ggsave(filename = "spatial_plot.png", plot = p1, units = "in", width = 24, height = 13.5, dpi = 600, path = "Outputs/knn_analysis/plots/", device = "png")
-```
 ## KNN analysis 
 ```{r knn functions}
-#' Nearest neighbors function with options to calculate mean neighborhood intensity
-#'
-#' @param data A data frame or matrix of predictor variables for the neighbors (required)
-#' @param observation A data frame or matrix of predictor variables for the observation of interest (required)
-#' @param num_neighbors An integer specifying the maximum number of nearest neighbors to find (required)
-#' @param distance_func A function to calculate distance between neighbors (e.g., euclidean_distance) (required)
-#' @param p_val An optional numeric value for Minkowski distance calculation (default: NULL)
-#' @param apply_intensity A logical indicating if intensity information should be used (default: TRUE)
-#' @param intensity_data A data frame or matrix containing intensity information (default: my_x)
-#' @param p_only A logical indicating if only 'P' neighbors should be used (default: TRUE)
-#' @param calc_mean_intensity A logical indicating if the mean intensity of the neighborhood should be calculated (default: FALSE)
-#' @param custom_neighbors An optional numeric vector of pre-selected neighbor indices (default: NULL)
-#' @param random_num_neighbors A logical indicating if the function should select a random number of neighbors equal to k (default: FALSE)
-#' @return A list containing information about the nearest neighbors:
-#'         - neighbor_indices: Numeric vector of neighbor indices
-#'         - distances: Numeric vector of distances between the observation and neighbors
-#'         - mean_distance: Mean of the updated distances
-#'         - distances_updated: Numeric vector of updated distances considering intensity information
 nearest_neighbors <- function(data, observation, num_neighbors, distance_func, p_val = NULL, apply_intensity = TRUE, intensity_data = my_x, p_only = TRUE, calc_mean_intensity = FALSE, custom_neighbors = NULL, random_num_neighbors = FALSE) {
+  #' Nearest neighbors function with options to calculate mean neighborhood intensity
+  #' @param data A data frame or matrix of predictor variables for the neighbors (required)
+  #' @param observation A data frame or matrix of predictor variables for the observation of interest (required)
+  #' @param num_neighbors An integer specifying the maximum number of nearest neighbors to find (required)
+  #' @param distance_func A function to calculate distance between neighbors (e.g., euclidean_distance) (required)
+  #' @param p_val An optional numeric value for Minkowski distance calculation (default: NULL)
+  #' @param apply_intensity A logical indicating if intensity information should be used (default: TRUE)
+  #' @param intensity_data A data frame or matrix containing intensity information (default: my_x)
+  #' @param p_only A logical indicating if only 'P' neighbors should be used (default: TRUE)
+  #' @param calc_mean_intensity A logical indicating if the mean intensity of the neighborhood should be calculated (default: FALSE)
+  #' @param custom_neighbors An optional numeric vector of pre-selected neighbor indices (default: NULL)
+  #' @param random_num_neighbors A logical indicating if the function should select a random number of neighbors equal to k (default: FALSE)
+  #' @return A list containing information about the nearest neighbors:
+  #'         - neighbor_indices: Numeric vector of neighbor indices
+  #'         - distances: Numeric vector of distances between the observation and neighbors
+  #'         - mean_distance: Mean of the updated distances
+  #'         - distances_updated: Numeric vector of updated distances considering intensity information
+
+
   # Check the number of observations is the same
   if (ncol(data) != ncol(observation)) {
     stop("Data must have the same number of variables")
@@ -203,12 +234,12 @@ nearest_neighbors <- function(data, observation, num_neighbors, distance_func, p
   if (apply_intensity) {
     intensity_info <- intensity_data[neighbor_indices, ]
     distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
-
+    
+    # Calculate updated distances with intensity information for just P neighbors
     if (p_only) {
       intensity_info <- filter(intensity_info, mecp2_p == "P")
       if (nrow(intensity_info) == 0) {
         writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-        return(list(NA))
       }
     }
   }
@@ -231,33 +262,24 @@ euclidean_distance <- function(a, b) {
     stop("Vectors must be of the same length")
   }
 }
+
+
+# For 3D data
+euclidean_distance_3d <- function(a, b, c) {
+  # Check that all three vectors have the same number of observations
+  if (length(a) == length(b) && length(a) == length(c)) {
+    sqrt(sum((a - b)^2 + (a - c)^2 + (b - c)^2))
+  } else {
+    stop("Vectors must be of the same length")
+  }
+}
 ```
 
 ```{r knn analysis with 1 neighbor}
 p_score <- 0
 n_score <- 0
-using_intensity <- TRUE
 
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
-colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-
-naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
-naive_df_het$condition <- rep("HET", nrow(naive_df_het))
-sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
-sur_df_het$condition <- rep("HET", nrow(sur_df_het))
-
-merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
-merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
-merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
-# Removing a single image because it just is grouped by itself
-merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
 merged_df <- merged_df %>% group_by(image)
 all_imgs <- merged_df %>% group_split(merged_df)
 
@@ -268,11 +290,11 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 1, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 1, distance_func = euclidean_distance, apply_intensity = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 1, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
-      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
-      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[4]]
     }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
@@ -357,10 +379,10 @@ p_score <- 0
 n_score <- 0
 using_intensity <- TRUE
 
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -386,12 +408,12 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = FALSE)[[1]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE, p_only = TRUE)[[1]]
 
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
-      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
-      dist_updated <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[3]]
+      dist_updated <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[4]]
     }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
@@ -469,10 +491,10 @@ p_score <- 0
 n_score <- 0
 using_intensity <- TRUE
 
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -495,19 +517,22 @@ all_imgs <- merged_df %>% group_split(merged_df)
 for (i in 1:length(all_imgs)) {
   current_img <- all_imgs[[i]]
   current_img$knn_5_label <- rep(0, nrow(current_img))
+  
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 3, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = FALSE)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE, p_only = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
-      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
-      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 5, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE)[[4]]
     }
+    
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    
     if (using_intensity == TRUE) {
       if (my_add_p_score == 0) {
         next
@@ -518,8 +543,10 @@ for (i in 1:length(all_imgs)) {
       current_img[r, "knn_5_label"] <- sum((nn_status$mecp2_p == "P")) / 5
     }
   }
+  
   write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_5_", i, "_df_16_bit_intensity.csv"))
 }
+
 
 all_dfs <- vector(mode = "list", length = 15)
 for (i in 1:length(all_imgs)) {
@@ -579,10 +606,10 @@ p_score <- 0
 n_score <- 0
 using_intensity <- TRUE
 
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -609,11 +636,11 @@ for (i in 1:length(all_imgs)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
 
-    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[1]]
-    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[2]]
+    my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 21, distance_func = euclidean_distance, apply_intensity = TRUE)[[1]]
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 21, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
-      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[3]]
-      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = 21, FUN = euclidean_distance, use_intensity = TRUE)[[4]]
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 21, distance_func = euclidean_distance, apply_intensity = TRUE)[[3]]
+      mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 21, distance_func = euclidean_distance, apply_intensity = TRUE)[[4]]
     }
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
@@ -711,22 +738,10 @@ stat_used <- "spearman"
 fit_line <- "reg.line"
 using_intensity <- FALSE
 
-# three_d_data <- read.csv("Data/Jacob/3d6WOdataset.csv")
-# three_d_data <- three_d_data %>%
-#   select(image, Name, Mean, CX..pix., CY..pix., CZ..pix.) %>%
-#   rename_all(tolower) %>%
-#   rename(
-#     x = cx..pix.,
-#     y = cy..pix.,
-#     z = cz..pix.
-#   ) %>%
-#   mutate(hemisphere = str_extract(image, "(LH|RH)")) %>%
-#   mutate(condition = str_extract(image, "(NW|NH|SW|SH)"))
-
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -757,7 +772,7 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = k_n, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = TRUE, mean_neighborhood_intensity = TRUE)
+    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = k_n, distance_func = euclidean_distance, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE)
     img_means <- c(img_means, current_cell_neighbor_mean)
     current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
   }
@@ -785,7 +800,7 @@ p1 <- ggscatter(
   cor.coef = TRUE,
   shape = 21,
   color = "black",
-  fill = "mecp2_p",
+  fill = "black",
   alpha = 0.5,
   cor.method = stat_used,
   xlab = "Mean Intensity of Cells",
@@ -810,7 +825,6 @@ p3 <- p2 + stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~"))
   label.y = 3500
 )
 ```
-
 
 ```{r each condition neighborhood analysis knn}
 plots <- list()
@@ -962,10 +976,10 @@ stat_used <- "spearman"
 fit_line <- "reg.line"
 using_intensity <- FALSE
 
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -999,7 +1013,7 @@ for (k in k_ns) {
     for (r in 1:nrow(current_img)) {
       my_obs <- current_img[r, ]
       my_x <- filter(current_img, id != my_obs$id)
-      current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], k = k, FUN = euclidean_distance, use_intensity = TRUE, use_p_only = TRUE, mean_neighborhood_intensity = TRUE)
+      current_cell_neighbor_mean <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = k, distance_func = euclidean_distance, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE)
       img_means <- c(img_means, current_cell_neighbor_mean)
       current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
     }
@@ -1144,7 +1158,6 @@ for (k in k_ns) {
 }
 ```
 
-
 ```{r making the k1 to k15 plot}
 k_ns <- seq(1, 15, 1)
 rhos_nh <- c(0.25, 0.42, 0.36, 0.33, 0.37, 0.36, 0.39, 0.38, 0.34, 0.36, 0.39, 0.38, 0.38, 0.35, 0.36)
@@ -1183,122 +1196,8 @@ ggsave(plot = p1, filename = "rhos_across_k_1_to_15_nh_sh.svg", path = "Outputs/
 ggsave(plot = p1, filename = "rhos_across_k_1_to_15_nh_sh.png", path = "Outputs/knn_analysis/plots/", device = "png", height = 9, width = 16, units = "in", dpi = 600)
 ```
 
-
-```{r knn random neighbors at k of 5}
-k_ns <- seq(1, 15, 1)
-file_type_used <- "png"
-stat_used <- "spearman"
-fit_line <- "reg.line"
-
-
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
-
-colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
-
-naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
-naive_df_het$condition <- rep("HET", nrow(naive_df_het))
-sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
-sur_df_het$condition <- rep("HET", nrow(sur_df_het))
-
-merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
-merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
-merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
-# Removing a single image because it just is grouped by itself
-merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
-merged_df <- merged_df %>% group_by(image)
-# Filtering to just P annotated cells
-merged_df <- filter(merged_df, mecp2_p == "P")
-# Filtering to just NH and SH cells for the k 1 to k 15 scan
-merged_df <- filter(merged_df, condition_spec == "NH" | condition_spec == "SH")
-all_imgs <- merged_df %>% group_split(merged_df)
-
-# Have to set the seed for reproducibility
-cor_results <- list()
-counter <- 1
-set.seed(123)
-for (i in 1:length(all_imgs)) {
-  current_img <- all_imgs[[i]]
-  current_img_sampled <- current_img %>% sample_frac(0.8)
-  for (r in 1:nrow(current_img_sampled)) {
-    current_img_sampled_neigh <- current_img_sampled %>% sample_n(size = 3)
-    current_img_sampled[r, "positive_neighborhood_mean"] <- mean(current_img_sampled_neigh$mean)
-  }
-  cor_res <- cor.test(x = as.numeric(as.vector(unlist(current_img_sampled$mean))), y = as.numeric(as.vector(unlist(current_img_sampled$positive_neighborhood_mean))), method = "spearman")
-  cor_results[[counter]] <- cor_res
-  counter <- counter + 1
-}
-```
-
-
-```{r plot the correlations}
-k_rand_df <- data.frame(
-  k = rep(3, times = 8),
-  condition = rep(c("NH", "SH"), each = 4)
-)
-
-cors <- c()
-for (r in 1:length(cor_results)) {
-  current_cor <- cor_results[[r]]
-  cors <- c(cors, as.numeric(as.vector(unlist(current_cor$estimate))))
-}
-
-k_rand_df$rho <- cors
-k_rand_df$condition <- c("NH", "SH", "NH", "SH", "SH", "SH", "NH", "NH")
-
-p1 <- ggplot(data = k_rand_df, aes(x = condition, y = rho, color = condition, fill = condition)) +
-  geom_col(position = "dodge", width = 0.3) +
-  theme(
-    panel.background = element_blank(),
-    legend.position = "none",
-    axis.title = element_text(face = "bold", size = 18),
-    axis.text = element_text(size = 16),
-    axis.ticks.length = unit(0.2, units = "cm"),
-    axis.ticks = element_line(linewidth = 1.25),
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
-  ) +
-  xlab("Condition") +
-  ylab(expression(rho)) +
-  ggtitle("K = 3") +
-  scale_fill_discrete(type = c("steelblue", "orange")) +
-  scale_color_discrete(type = c("steelblue", "orange")) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 1.25)
-
-ggsave(plot = p1, filename = "nh_vs_sh_random_knn_3_vs_rho.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
-```
-
-```{r histogram of correlations}
-p1 <- ggplot(data = k_rand_df, aes(x = rho)) +
-  geom_histogram() +
-  theme(
-    panel.background = element_blank(),
-    axis.title = element_text(size = 18, face = "bold"),
-    axis.text = element_text(size = 16),
-    axis.ticks = element_line(linewidth = 1.25),
-    axis.ticks.length = unit(0.2, units = "cm"),
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-    axis.line = element_line(colour = "black", linewidth = 1.25)
-  ) +
-  ggtitle("K = 3") +
-  xlab(expression(rho)) +
-  ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))
-
-ggsave(plot = p1, filename = "nh_vs_sh_random_knn_3_vs_rho_histogram.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
-```
-
-
-```{r another attempt at correlation analysis}
+```{r distribution of random rhos histogram analysis}
 k_n <- 5
-file_type_used <- "png"
-stat_used <- "spearman"
-fit_line <- "reg.line"
-using_intensity <- FALSE
 
 naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
 naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
@@ -1323,7 +1222,9 @@ merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G15
 merged_df <- merged_df %>% group_by(image)
 # Filtering to just P annotated cells
 merged_df <- filter(merged_df, mecp2_p == "P")
+# Modify this line to change conditions
 merged_df <- filter(merged_df, condition_spec == "NH")
+current_cond <- as.character(unique(merged_df$condition_spec))
 all_imgs <- merged_df %>% group_split(merged_df)
 
 
@@ -1355,13 +1256,13 @@ for (n in 1:1000) {
       current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
     }
 
-    write.csv(current_img, paste0("Outputs/knn_analysis/data/1000_simulation/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, ".csv"))
+    write.csv(current_img, paste0("Outputs/knn_analysis/data/1000_simulation/", current_cond, "/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, ".csv"))
     img_means <- c()
   }
 
   all_dfs <- vector(mode = "list", length = 4)
   for (i in 1:length(all_imgs)) {
-    current_df <- read.csv(paste0("Outputs/knn_analysis/data/1000_simulation/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, ".csv"))
+    current_df <- read.csv(paste0("Outputs/knn_analysis/data/1000_simulation/", current_cond, "/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, ".csv"))
     all_dfs[[i]] <- current_df
   }
 
@@ -1377,43 +1278,394 @@ for (n in 1:1000) {
 }
 
 
+all_rhos_df <- data.frame(
+  k = rep(k_n, times = length(all_rhos_stored)),
+  condition = rep(unique(mean_neighbor_df$condition_spec), times = length(all_rhos_stored)),
+  rho = all_rhos_stored, p_value = all_p_values_stored
+)
 
+write.csv(all_rhos_df, file = paste0("Outputs/knn_analysis/data/1000_simulation/Finished_files/finished_", unique(mean_neighbor_df$condition_spec), "_df_for_plot_k_", k_n, ".csv"))
+```
 
-
-# Function to read in all the files and perform all correlation tests
-read_files <- function(folder_path, pattern, combine_all_files = FALSE, perform_cor = TRUE) {
+```{r histograms by condition}
+# Function to easily read and combine the finished files
+read_files <- function(folder_path, pattern) {
   # Get a list of all files in the folder that match the pattern
   file_list <- list.files(path = folder_path, pattern = pattern, full.names = TRUE)
 
-  # Function to read and perform cor.test
-  process_file <- function(file) {
-    data <- read.csv(file)
+  # Read in all CSV files and combine into a single dataframe
+  data <- do.call(rbind, lapply(file_list, read.csv))
 
-    if (perform_cor) {
-      cor_res <- cor.test(x = data$mean, y = data$positive_neighborhood_mean, method = "spearman")
-      return(list(data = data, cor_res = cor_res))
-    } else {
-      return(list(data = data))
-    }
-  }
-
-  # Read in all CSV files and perform cor.test if needed
-  file_results <- lapply(file_list, process_file)
-
-  if (combine_all_files) {
-    data <- do.call(rbind, lapply(file_results, function(x) x$data))
-    return(data)
-  } else {
-    return(file_results)
-  }
+  return(data)
 }
 
 
-all_nh_k_5_df <- read_files(folder_path = "Outputs/knn_analysis/data/1000_simulation/", pattern = "*.csv", combine_all_files = FALSE, perform_cor = TRUE)
+
+all_rho_data <- read_files(folder_path = "Outputs/knn_analysis/data/1000_simulation/Finished_files", pattern = "*.csv")
+
+all_rho_data$condition <- factor(all_rho_data$condition, levels = c("NW", "NH", "SW", "SH"))
+
+p1 <- ggplot(data = all_rho_data, aes(x = rho)) +
+  geom_histogram() +
+  theme(
+    panel.background = element_blank(),
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 16),
+    axis.ticks = element_line(linewidth = 1.25),
+    axis.ticks.length = unit(0.2, units = "cm"),
+    strip.text = element_text(size = 18, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.line = element_line(colour = "black", linewidth = 1.25)
+  ) +
+  ggtitle(paste0("K = ", k_n, " | ", length(all_rhos_stored))) +
+  xlab(expression(rho)) +
+  ylab("Count") +
+  scale_y_continuous(expand = c(0, 0)) +
+  facet_wrap(~condition, nrow = 2, ncol = 2)
+
+ggsave(plot = p1, filename = "all_conditions_random_knn_5_vs_rho_histogram.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
+```
+
+```{r 3d analysis}
+threed_data <- read.csv("Data/Jacob/3d6WOdataset.csv")
+threed_data <- threed_data %>%
+  select(image, Mean, CX..pix., CY..pix., CZ..pix.) %>%
+  rename_all(tolower) %>%
+  rename(
+    x = cx..pix.,
+    y = cy..pix.,
+    z = cz..pix.
+  ) %>%
+  mutate(hemisphere = str_extract(image, "(LH|RH)")) %>%
+  mutate(condition = str_extract(image, "(NW|NH|SW|SH)")) %>%
+  mutate(mecp2_p = "P") %>%
+  mutate(id = 1:nrow(.))
+
+
+k_n <- 5
+
+# Modify this line to change conditions
+threed_data <- filter(threed_data, condition == "NW")
+current_cond <- as.character(unique(threed_data$condition))
+threed_data <- threed_data %>% group_by(image)
+all_imgs <- threed_data %>% group_split(threed_data)
+
+
+# Loop for 1000 times
+all_rhos_stored <- c()
+all_p_values_stored <- c()
+
+for (n in 1:1000) {
+  img_means <- c()
+  for (i in 1:length(all_imgs)) {
+    current_img <- all_imgs[[i]]
+    current_img$positive_neighborhood_mean <- rep(0, nrow(current_img))
+    for (r in 1:nrow(current_img)) {
+      my_obs <- current_img[r, ]
+      my_x <- current_img %>% filter(id != my_obs$id)
+      current_cell_neighbor_mean <- nearest_neighbors(
+        data = my_x[, 3:5],
+        observation = my_obs[, 3:5],
+        num_neighbors = k_n,
+        distance_func = function(a, b) euclidean_distance_3d(a = my_obs$x, b = my_obs$y, c = my_obs$z),
+        apply_intensity = TRUE,
+        p_only = TRUE,
+        random_num_neighbors = TRUE,
+        calc_mean_intensity = TRUE,
+        intensity_data = my_x
+      )
+      img_means <- c(img_means, current_cell_neighbor_mean)
+      current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
+    }
+
+    write.csv(current_img, paste0("Outputs/knn_analysis/data/1000_simulation/", current_cond, "/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, "_3d_checked.csv"))
+    img_means <- c()
+  }
+
+  all_dfs <- vector(mode = "list", length = 4)
+  for (i in 1:length(all_imgs)) {
+    current_df <- read.csv(paste0("Outputs/knn_analysis/data/1000_simulation/", current_cond, "/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_random_", k_n, "_sample_", n, "_3d_checked.csv"))
+    all_dfs[[i]] <- current_df
+  }
+
+  mean_neighbor_df <- bind_rows(all_dfs)
+
+
+  # Calculating rho
+  cor_res <- cor.test(x = mean_neighbor_df$mean, y = mean_neighbor_df$positive_neighborhood_mean, method = "spearman")
+  current_p <- cor_res$p.value
+  current_rho <- as.numeric(as.vector(unlist(cor_res$estimate)))
+  all_rhos_stored <- c(current_rho, all_rhos_stored)
+  all_p_values_stored <- c(current_p, all_p_values_stored)
+}
+
 
 all_rhos_df <- data.frame(
-  k = rep(5, times = 1000),
-  condition = rep("NH", times = 1000),
+  k = rep(k_n, times = length(all_rhos_stored)),
+  condition = rep(unique(mean_neighbor_df$condition), times = length(all_rhos_stored)),
   rho = all_rhos_stored, p_value = all_p_values_stored
 )
+
+write.csv(all_rhos_df, file = paste0("Outputs/knn_analysis/data/1000_simulation/Finished_files/finished_", unique(mean_neighbor_df$condition), "_df_for_plot_k_", k_n, "_3d_checked.csv"))
+```
+
+
+```{r histogram for 3d data}
+all_rho_data <- read_files(folder_path = "Outputs/knn_analysis/data/1000_simulation/Finished_files", pattern = "*_3d.csv")
+
+all_rho_data$condition <- factor(all_rho_data$condition, levels = c("NW", "NH"))
+
+# Define custom labels
+custom_labels <- c(
+  "3" = "K = 3",
+  "5" = "K = 5",
+  "NW" = "NW",
+  "NH" = "NH"
+)
+
+
+p1 <- ggplot(data = all_rho_data, aes(x = rho)) +
+  geom_histogram() +
+  theme(
+    panel.background = element_blank(),
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 16),
+    axis.ticks = element_line(linewidth = 1.25),
+    axis.ticks.length = unit(0.2, units = "cm"),
+    strip.text = element_text(size = 18, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    axis.line = element_line(colour = "black", linewidth = 1.25)
+  ) +
+  xlab(expression(rho)) +
+  ylab("Count") +
+  scale_y_continuous(expand = c(0, 0)) +
+  facet_grid(k ~ condition, labeller = as_labeller(custom_labels))
+
+ggsave(plot = p1, filename = "all_conditions_random_knn_vs_rho_histogram_3d.svg", device = "svg", width = 8, height = 8, units = "in", path = "Outputs/knn_analysis/plots/")
+```
+
+```{r KNN analysis for 3d data}
+p_score <- 0
+n_score <- 0
+k_n <- 5
+file_type_used <- "png"
+# pearson, kendall, or spearman
+stat_used <- "spearman"
+# reg.line or loess
+fit_line <- "reg.line"
+using_intensity <- FALSE
+
+
+threed_data <- read.csv("Data/Jacob/3d6WOdataset.csv")
+threed_data <- threed_data %>%
+  select(image, Mean, CX..pix., CY..pix., CZ..pix.) %>%
+  rename_all(tolower) %>%
+  rename(
+    x = cx..pix.,
+    y = cy..pix.,
+    z = cz..pix.
+  ) %>%
+  mutate(hemisphere = str_extract(image, "(LH|RH)")) %>%
+  mutate(condition = str_extract(image, "(NW|NH|SW|SH)")) %>%
+  mutate(mecp2_p = "P") %>%
+  mutate(id = 1:nrow(.))
+
+threed_data <- threed_data %>% group_by(image)
+all_imgs <- threed_data %>% group_split(threed_data)
+
+
+img_means <- c()
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$positive_neighborhood_mean <- rep(0, nrow(current_img))
+  # Each row in an image is a cell
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 3:5], my_obs[, 3:5], num_neighbors = k_n, distance_func = function(a, b) euclidean_distance_3d(a = my_obs$x, b = my_obs$y, c = my_obs$z), intensity_data = my_x, p_only = TRUE, calc_mean_intensity = TRUE, apply_intensity = TRUE)
+    img_means <- c(img_means, current_cell_neighbor_mean)
+    current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
+  }
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/3d_data/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis.csv"))
+  img_means <- c()
+}
+
+
+
+all_dfs <- vector(mode = "list", length = 16)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/3d_data/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+mean_neighbor_df <- bind_rows(all_dfs)
+
+mean_neighbor_df$condition_spec <- factor(mean_neighbor_df$condition, levels = c("NW", "NH"))
+
+
+p1 <- ggscatter(
+  data = mean_neighbor_df,
+  x = "mean", y = "positive_neighborhood_mean",
+  conf.int = FALSE,
+  cor.coef = TRUE,
+  shape = 21,
+  color = "black",
+  fill = "mecp2_p",
+  alpha = 0.5,
+  cor.method = stat_used,
+  xlab = "Mean Intensity of Cells",
+  ylab = "Mean MECP2+\nNeighborhood Intensity",
+  ellipse = TRUE,
+  mean.point = TRUE,
+  cor.coeff.args = list(method = stat_used, label.x = 3000)
+)
+
+p2 <- ggpar(p1,
+  legend = "right",
+  legend.title = "MECP2\nStatus",
+  palette = c("#4682b4", "#F4A460"),
+  main = paste0("KNN = ", k_n, " | All Conditions & Images | ", stat_used),
+  font.main = c(16, "bold"),
+  font.x = c(14, "bold"),
+  font.y = c(14, "bold")
+)
+
+p3 <- p2 + stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~")),
+  label.x = 3000,
+  label.y = 3500
+)
+```
+
+```{r}
+plots <- list()
+
+
+for (c in unique(mean_neighbor_df$condition)) {
+  current_cond <- filter(mean_neighbor_df, condition == c)
+  current_cond_p <- filter(current_cond, mecp2_p == "P")
+  p1 <- ggscatter(
+    data = current_cond_p,
+    x = "mean", y = "positive_neighborhood_mean",
+    conf.int = TRUE,
+    cor.coef = TRUE,
+    cor.coeff.args = list(
+      method = "spearman",
+      label.x = 2000, label.y = 1000, label.sep = "\n",
+      cor.coef.name = "rho"
+    ),
+    parse = TRUE,
+    cor.coef.size = 10,
+    shape = 21,
+    size = 2.5,
+    add = fit_line,
+    add.params = list(
+      color = "black",
+      fill = "grey"
+    ),
+    repel = TRUE,
+    label.rectangle = TRUE,
+    color = "black",
+    fill = "black",
+    alpha = 1,
+    cor.method = stat_used,
+    xlab = "Mean Intensity of Cells",
+    ylab = "Mean MECP2+\nNeighborhood Intensity",
+    ellipse = FALSE,
+    mean.point = FALSE
+  )
+
+  # p2 for the single annotation context
+  p2 <- ggpar(p1,
+    title = paste0("K = ", k_n, " | ", c),
+    font.main = c(20, "bold"),
+    font.x = c(18, "bold"),
+    font.y = c(18, "bold"),
+    ggtheme = theme(plot.title = element_text(hjust = 0.5))
+  )
+
+  p2 <- p2 +
+    theme(
+      axis.line = element_line(linewidth = 1.5, lineend = "round"),
+      axis.text = element_text(size = 18), axis.ticks = element_line(linewidth = 0.2),
+      plot.subtitle = element_text(face = "italic")
+    )
+
+  # For adding density-based contours. Comment out if not wanting countours
+  p2 <- p2 +
+    geom_density2d(aes(colour = ..level..), linewidth = 0.7, n = 100) +
+    scale_colour_gradient(low = "blue", high = "red") +
+    theme(legend.position = "none")
+
+  # Change to p2 when in a single annotation context, p5 otherwise
+  ggsave(plot = p2, filename = paste0("knn_", k_n, "_", c, "_positive_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included_3d.", file_type_used), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = file_type_used, dpi = 600, width = 8, height = 8, units = "in")
+
+  # Change to p2 for single annotation case, p5 otherwise
+  plots[[paste0(c)]] <- p2
+}
+
+# Combo plot
+combo_plot <- ggarrange(
+  plots$NW,
+  plots$NH,
+  ncol = 2,
+  nrow = 1,
+  labels = "AUTO",
+  align = "hv",
+  legend = "none",
+  common.legend = TRUE,
+  font.label = list(
+    size = 18,
+    face = "bold"
+  )
+)
+
+ggsave(plot = combo_plot, filename = paste0("knn_", k_n, "_combo_plot_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included_with_contours_3d.", file_type_used), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = file_type_used, dpi = 600, width = 12, height = 12, units = "in", bg = "white")
+```
+
+
+
+```{r 2d data volin plot distribution}
+naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+
+colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+colnames(sur_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
+
+naive_df_wt$condition <- rep("WT", nrow(naive_df_wt))
+naive_df_het$condition <- rep("HET", nrow(naive_df_het))
+sur_df_wt$condition <- rep("WT", nrow(sur_df_wt))
+sur_df_het$condition <- rep("HET", nrow(sur_df_het))
+
+merged_df <- bind_rows(naive_df_wt, naive_df_het, sur_df_wt, sur_df_het)
+merged_df$condition_spec <- rep(c("NW", "NH", "SW", "SH"), c(223, 259, 249, 269))
+merged_df$condition_spec <- factor(merged_df$condition_spec, levels = c("NW", "SW", "NH", "SH"))
+# Removing a single image because it just is grouped by itself
+merged_df <- filter(merged_df, image != "MAX_16-bit_NH-LW8-2.2-Map126_561-60_G150_E100_z13-23")
+merged_df <- merged_df %>% group_by(image)
+all_imgs <- merged_df %>% group_split(merged_df)
+
+k_n <- 5
+
+all_dfs <- vector(mode = "list", length = 16)
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_", i, 
+                                "_knn_", k_n,
+                                "_df_16_bit_mean_neighborhood_analysis.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+mean_neighbor_df <- bind_rows(all_dfs)
+
+
+
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img <- current_img %>%
+    filter(mecp2_p == "P")
+}
 ```
