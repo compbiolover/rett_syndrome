@@ -234,7 +234,7 @@ nearest_neighbors <- function(data, observation, num_neighbors, distance_func, p
   if (apply_intensity) {
     intensity_info <- intensity_data[neighbor_indices, ]
     distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
-    
+
     # Calculate updated distances with intensity information for just P neighbors
     if (p_only) {
       intensity_info <- filter(intensity_info, mecp2_p == "P")
@@ -517,22 +517,22 @@ all_imgs <- merged_df %>% group_split(merged_df)
 for (i in 1:length(all_imgs)) {
   current_img <- all_imgs[[i]]
   current_img$knn_5_label <- rep(0, nrow(current_img))
-  
+
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    
+
     my_ind <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE, p_only = TRUE)[[1]]
     my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
       my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE)[[3]]
       mod_dists <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 5, distance_func = euclidean_distance, apply_intensity = TRUE)[[4]]
     }
-    
+
     print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
     nn_status <- as.data.frame(my_x[my_ind, 5])
     nn_info <- as.data.frame(my_x[my_ind, 1:11])
-    
+
     if (using_intensity == TRUE) {
       if (my_add_p_score == 0) {
         next
@@ -543,7 +543,7 @@ for (i in 1:length(all_imgs)) {
       current_img[r, "knn_5_label"] <- sum((nn_status$mecp2_p == "P")) / 5
     }
   }
-  
+
   write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_5_", i, "_df_16_bit_intensity.csv"))
 }
 
@@ -1625,10 +1625,10 @@ ggsave(plot = combo_plot, filename = paste0("knn_", k_n, "_combo_plot_neighborho
 
 
 ```{r 2d data volin plot distribution}
-naive_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "WT")
-naive_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "HET")
-sur_df_wt <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surWT")
-sur_df_het <- read_excel("Data/Jacob/16bitdata.xlsx", sheet = "surHET")
+naive_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "WT")
+naive_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "HET")
+sur_df_wt <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surWT")
+sur_df_het <- read_excel("Data/Old data/Jacob/16bitdata.xlsx", sheet = "surHET")
 
 colnames(naive_df_wt) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
 colnames(naive_df_het) <- c("image", "roi", "area", "mean", "mecp2_p", "id", "x", "y")
@@ -1652,20 +1652,358 @@ k_n <- 5
 
 all_dfs <- vector(mode = "list", length = 16)
 for (i in 1:length(all_imgs)) {
-  current_df <- read.csv(paste0("Outputs/knn_analysis/data/img_", i, 
-                                "_knn_", k_n,
-                                "_df_16_bit_mean_neighborhood_analysis.csv"))
+  current_df <- read.csv(paste0(
+    "Outputs/knn_analysis/data/img_", i,
+    "_knn_", k_n,
+    "_df_16_bit_mean_neighborhood_analysis.csv"
+  ))
   all_dfs[[i]] <- current_df
 }
 
 mean_neighbor_df <- bind_rows(all_dfs)
 
+counter <- 1
+all_imgs <- list()
+for (i in unique(mean_neighbor_df$image)) {
+  current_img <- filter(mean_neighbor_df, image == i)
+  p1 <- ggplot(aes(x = image, y = positive_neighborhood_mean), data = current_img) +
+    geom_violin(draw_quantiles = c(0.25, 0.50, 0.75)) +
+    theme(
+      panel.background = element_blank(),
+      axis.title = element_text(size = 18),
+      axis.text = element_text(size = 16),
+      axis.ticks.length = unit(0.2, units = "cm")
+    ) +
+    xlab("Image") +
+    ylab("+ Neighborhood Mean") +
+    coord_flip()
+  all_imgs[[counter]] <- p1
+  counter <- counter + 1
+}
+
+p2 <- ggarrange(all_imgs[[1]],
+  all_imgs[[2]],
+  all_imgs[[3]],
+  all_imgs[[4]],
+  all_imgs[[5]],
+  all_imgs[[6]],
+  all_imgs[[7]],
+  all_imgs[[8]],
+  all_imgs[[9]],
+  all_imgs[[10]],
+  all_imgs[[11]],
+  all_imgs[[12]],
+  all_imgs[[13]],
+  all_imgs[[14]],
+  all_imgs[[15]],
+  all_imgs[[16]],
+  ncol = 4,
+  nrow = 4,
+  align = "hv",
+  labels = "AUTO"
+)
+
+overall_title <- "+ Neighborhood Mean"
+p2 <- annotate_figure(p2, top = text_grob(overall_title,
+  face = "bold", size = 22
+))
+
+
+ggsave(p2, filename = "positive_neighborhood_mean_violin_plot.png", device = "png", path = "Outputs/", width = 16, height = 16, dpi = 600, units = "in", bg = "white")
 
 
 
-for (i in 1:length(all_imgs)) {
-  current_img <- all_imgs[[i]]
-  current_img <- current_img %>%
-    filter(mecp2_p == "P")
+
+# Trying a slightly different analysis with doing the same scatter plot stuff as the color coding but for the violin plots
+all_imgs <- list()
+counter <- 1
+mean_neighbor_df_simplified <- mean_neighbor_df
+mean_neighbor_df_simplified <- mean_neighbor_df_simplified %>%
+  mutate(image = match(image, unique(image)))
+
+for (i in unique(mean_neighbor_df_simplified$condition_spec)) {
+  current_cond <- filter(mean_neighbor_df_simplified, condition_spec == i)
+  current_cond$image <- as.factor(current_cond$image)
+
+  # Test for normality using Shapiro-Wilk test
+  shapiro_test <- shapiro.test(current_cond$positive_neighborhood_mean)
+  if (shapiro_test$p.value >= 0.05) {
+    # Data is normally distributed
+    print("Data is normally distributed")
+
+    # Perform Levene's test for homogeneity of variances
+    library(car)
+    levene_test <- leveneTest(positive_neighborhood_mean ~ image, data = current_cond)
+    print(levene_test)
+
+    p_value <- levene_test$"Pr(>F)"[1] # Get the p-value from the test
+    p_value_text <- ifelse(p_value < 0.05, paste0("p = ", format(p_value, scientific = FALSE, digits = 3)), "NS")
+  } else {
+    # Data is not normally distributed
+    print("Data is not normally distributed")
+
+    # Perform Fligner-Killeen test for homogeneity of variances
+    fligner_test <- fligner.test(positive_neighborhood_mean ~ image, data = current_cond)
+    print(fligner_test)
+    
+    
+    kw_test <- kruskal.test(positive_neighborhood_mean ~ image, data = current_cond)
+    print(kw_test)
+
+    p_value <- fligner_test$p.value
+    p_value_kw <- kw_test$p.value
+    p_value_text <- ifelse(p_value < 0.05, paste0("p = ", format(p_value, scientific = TRUE, digits = 3)), "NS")
+     p_value_text <- ifelse(p_value_kw < 0.05, paste0("p = ", format(p_value_kw, scientific = TRUE, digits = 3)), "NS")
+  }
+
+
+
+  p1 <- ggplot(aes(x = image, y = positive_neighborhood_mean), data = current_cond) +
+    geom_violin(draw_quantiles = c(0.25, 0.50, 0.75)) +
+    geom_sina(aes(colour = image))+
+    theme(
+      panel.background = element_blank(),
+      axis.title = element_text(size = 18),
+      axis.text = element_text(size = 16),
+      axis.ticks.length = unit(0.2, units = "cm"),
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+      axis.line = element_line(color = "black", lineend = "round", linewidth = 1.25),
+      legend.title = element_blank(),
+      legend.text = element_blank(),
+      legend.key = element_blank(),
+      legend.position = "none"
+    ) +
+    ggtitle(paste0("K = 5 | ", current_cond$condition_spec, " | ", p_value_text)) +
+    xlab("Image") +
+    ylab("+ Neighborhood Mean") +
+    coord_flip()
+  all_imgs[[counter]] <- p1
+  counter <- counter + 1
+}
+
+
+
+p2 <- ggarrange(all_imgs[[2]],
+  all_imgs[[1]],
+  all_imgs[[3]],
+  all_imgs[[4]],
+  ncol = 2,
+  nrow = 2,
+  align = "hv",
+  labels = "AUTO"
+)
+
+# overall_title <- "+ Neighborhood Mean (Image and Condition)"
+# p2 <- annotate_figure(p2, top = text_grob(overall_title,
+#   face = "bold", size = 22
+# ))
+
+
+ggsave(p2, filename = "positive_neighborhood_mean_violin_plot_by_cond_and_img_with_p_values_kw.png", device = "png", path = "Outputs/", width = 8, height = 8, dpi = 600, units = "in", bg = "white")
+
+for (i in 1:length(all_imgs)){
+  ggsave(all_imgs[[i]], filename = paste0("positive_neighborhood_mean_violin_plot_by_cond_and_img_with_p_values_kw_",i,".svg"), device = "svg", path = "Outputs/", width = 8, height = 8, dpi = 600, units = "in", bg = "white" )
 }
 ```
+
+
+```{r color coding the scatter plots by image}
+plots <- list()
+counter <- 1
+
+mean_neighbor_df_simplified <- mean_neighbor_df
+mean_neighbor_df_simplified <- mean_neighbor_df_simplified %>%
+  mutate(image = match(image, unique(image)))
+
+
+for (c in unique(mean_neighbor_df_simplified$condition_spec)) {
+  current_cond <- filter(mean_neighbor_df_simplified, condition_spec == c)
+  current_cond$image <- as.factor(current_cond$image)
+  p1 <- ggscatter(
+    data = current_cond,
+    x = "mean", y = "positive_neighborhood_mean",
+    conf.int = TRUE,
+    cor.coef = TRUE,
+    cor.coeff.args = list(
+      method = "spearman",
+      label.x = 2000, label.y = 1700, label.sep = "\n",
+      cor.coef.name = "rho"
+    ),
+    parse = TRUE,
+    cor.coef.size = 10,
+    shape = 21,
+    size = 2.5,
+    add = fit_line,
+    add.params = list(
+      color = "black",
+      fill = "grey"
+    ),
+    repel = TRUE,
+    label.rectangle = TRUE,
+    color = "image",
+    fill = "image",
+    alpha = 1,
+    cor.method = stat_used,
+    xlab = "Mean Intensity of Cells",
+    ylab = "Mean MECP2+\nNeighborhood Intensity",
+    ellipse = FALSE,
+    mean.point = FALSE
+  )
+
+  # p2 for the single annotation context
+  p2 <- ggpar(p1,
+    title = paste0("K = ", k_n, " | ", c),
+    font.main = c(20, "bold"),
+    font.x = c(18, "bold"),
+    font.y = c(18, "bold"),
+    ggtheme = theme(plot.title = element_text(hjust = 0.5))
+  )
+
+  p2 <- p2 +
+    theme(
+      axis.line = element_line(linewidth = 1.25, lineend = "round"),
+      axis.text = element_text(size = 18),
+      axis.ticks = element_line(linewidth = 0.2),
+      plot.subtitle = element_text(face = "italic"),
+      legend.title = element_text(size = 16, face = "bold"),
+      legend.text = element_text(size = 14)
+    )+
+    labs(color = "Image", fill = "Image")
+
+  # For adding density-based contours. Comment out if not wanting countours
+  # p2 <- p2 +
+  #   geom_density2d(aes(colour = ..level..), linewidth = 0.7, n = 100) +
+  #   scale_colour_gradient(low = "blue", high = "red") +
+  #   theme(legend.position = "none")
+
+  # Change to p2 when in a single annotation context, p5 otherwise
+  ggsave(plot = p2, filename = paste0("knn_", k_n, "_", c, "_positive_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included_colored_by_image.", file_type_used), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = file_type_used, dpi = 600, width = 8, height = 8, units = "in")
+
+  # Change to p2 for single annotation case, p5 otherwise
+  plots[[paste0(c)]] <- p2
+  counter <- counter + 1
+}
+
+# Combo plot
+combo_plot <- ggarrange(
+  plots$NW,
+  plots$NH,
+  plots$SW,
+  plots$SH,
+  ncol = 2,
+  nrow = 2,
+  labels = "AUTO",
+  align = "hv",
+  legend = "right",
+  common.legend = FALSE,
+  font.label = list(
+    size = 18,
+    face = "bold"
+  )
+)
+
+
+ggsave(plot = combo_plot, filename = paste0("knn_", k_n, "_combo_plot_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included_with_contours_colored_by_image.", file_type_used), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = file_type_used, dpi = 600, width = 12, height = 12, units = "in", bg = "white")
+
+
+for (i in 1:length(plots)){
+  ggsave(plot = plots[[i]], filename = paste0("knn_", k_n, "_combo_plot_neighborhood_correlation_analysis_p_cells_only_", stat_used, "_only_p_cells_included_no_contours_colored_by_image_",i, ".svg"), path = "Outputs/knn_analysis/plots/correlation_analysis/", device = "svg", dpi = 600, width = 8, height = 8, units = "in", bg = "white" )
+}
+
+```
+
+
+# Doing Mean Intensity by image sina plots
+```{r mean intensity by image sina plots}
+# Trying a slightly different analysis with doing the same scatter plot stuff as the color coding but for the violin plots
+all_imgs <- list()
+counter <- 1
+mean_neighbor_df_simplified <- mean_neighbor_df
+mean_neighbor_df_simplified <- mean_neighbor_df_simplified %>%
+  mutate(image = match(image, unique(image)))
+
+for (i in unique(mean_neighbor_df_simplified$condition_spec)) {
+  current_cond <- filter(mean_neighbor_df_simplified, condition_spec == i)
+  current_cond$image <- as.factor(current_cond$image)
+
+  # Test for normality using Shapiro-Wilk test
+  shapiro_test <- shapiro.test(current_cond$mean)
+  if (shapiro_test$p.value >= 0.05) {
+    # Data is normally distributed
+    print("Data is normally distributed")
+
+    # Perform Levene's test for homogeneity of variances
+    library(car)
+    levene_test <- leveneTest(mean ~ image, data = current_cond)
+    print(levene_test)
+
+    p_value <- levene_test$"Pr(>F)"[1] # Get the p-value from the test
+    p_value_text <- ifelse(p_value < 0.05, paste0("p = ", format(p_value, scientific = FALSE, digits = 3)), "NS")
+  } else {
+    # Data is not normally distributed
+    print("Data is not normally distributed")
+
+    # Perform Fligner-Killeen test for homogeneity of variances
+    fligner_test <- fligner.test(mean ~ image, data = current_cond)
+    print(fligner_test)
+    
+    
+    kw_test <- kruskal.test(mean ~ image, data = current_cond)
+    print(kw_test)
+
+    p_value <- fligner_test$p.value
+    p_value_kw <- kw_test$p.value
+    p_value_text <- ifelse(p_value < 0.05, paste0("p = ", format(p_value, scientific = TRUE, digits = 3)), "NS")
+     p_value_text <- ifelse(p_value_kw < 0.05, paste0("p = ", format(p_value_kw, scientific = TRUE, digits = 3)), "NS")
+  }
+
+
+
+  p1 <- ggplot(aes(x = image, y = mean), data = current_cond) +
+    geom_violin(draw_quantiles = c(0.25, 0.50, 0.75)) +
+    geom_sina(aes(colour = image))+
+    theme(
+      panel.background = element_blank(),
+      axis.title = element_text(size = 18),
+      axis.text = element_text(size = 16),
+      axis.ticks.length = unit(0.2, units = "cm"),
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+      axis.line = element_line(color = "black", lineend = "round", linewidth = 1.25),
+      legend.title = element_blank(),
+      legend.text = element_blank(),
+      legend.key = element_blank(),
+      legend.position = "none"
+    ) +
+    ggtitle(paste0("K = 5 | ", current_cond$condition_spec, " | ", p_value_text)) +
+    xlab("Image") +
+    ylab("Mean Intensity of Cells") +
+    coord_flip()
+  all_imgs[[counter]] <- p1
+  counter <- counter + 1
+}
+
+
+
+p2 <- ggarrange(all_imgs[[2]],
+  all_imgs[[1]],
+  all_imgs[[3]],
+  all_imgs[[4]],
+  ncol = 2,
+  nrow = 2,
+  align = "hv",
+  labels = "AUTO"
+)
+
+# overall_title <- "+ Neighborhood Mean (Image and Condition)"
+# p2 <- annotate_figure(p2, top = text_grob(overall_title,
+#   face = "bold", size = 22
+# ))
+
+
+ggsave(p2, filename = "mean_intensity_violin_plot_by_cond_and_img_with_p_values_kw.png", device = "png", path = "Outputs/", width = 8, height = 8, dpi = 600, units = "in", bg = "white")
+
+for (i in 1:length(all_imgs)){
+  ggsave(all_imgs[[i]], filename = paste0("mean_intensity_violin_plot_by_cond_and_img_with_p_values_kw_",i,".svg"), device = "svg", path = "Outputs/", width = 8, height = 8, dpi = 600, units = "in", bg = "white" )
+}
+```
+
