@@ -268,7 +268,6 @@ euclidean_distance <- function(a, b) {
 # For 3D data
 euclidean_distance_3d <- function(x1, y1, z1, x2, y2, z2) {
     sqrt(sum((x2-x1)^2 + (y2-y1)^2 + (z2-z1)^2))
-    # sqrt(sum((a - b)^2 + (a - c)^2 + (b - c)^2))
   }
 ```
 
@@ -482,6 +481,63 @@ ggsave(
   units = "in"
 )
 ```
+
+
+# Trying update 
+```{r trying corrected updated 3d code}
+threed_data <- read.csv("Data/Old data/Jacob/3d6WOdataset.csv")
+threed_data <- threed_data %>%
+  select(image, Mean, CX..pix., CY..pix., CZ..pix.) %>%
+  rename_all(tolower) %>%
+  rename(
+    x = cx..pix.,
+    y = cy..pix.,
+    z = cz..pix.
+  ) %>%
+  mutate(hemisphere = str_extract(image, "(LH|RH)")) %>%
+  mutate(condition = str_extract(image, "(NW|NH|SW|SH)")) %>%
+  mutate(mecp2_p = "P") %>%
+  mutate(id = 1:nrow(.))
+
+
+threed_data <- threed_data %>% group_by(image)
+all_imgs <- threed_data %>% group_split(threed_data)
+
+for (i in 1:length(all_imgs)) {
+  current_img <- all_imgs[[i]]
+  current_img$knn_3_label <- rep(0, nrow(current_img))
+  for (r in 1:nrow(current_img)) {
+    my_obs <- current_img[r, ]
+    my_x <- filter(current_img, id != my_obs$id)
+    my_ind <- nearest_neighbors(data = my_x[, 7:8], observation = my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance_3d, apply_intensity = TRUE, p_only = TRUE)[[1]]
+
+    my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
+    if (using_intensity == TRUE) {
+      my_add_p_score <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[3]]
+      dist_updated <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[4]]
+    }
+    print(paste0("The nearest neighbor of image ", my_obs$image, " with ROI ID ", my_obs$id, " has an MECP2_P status of: ", as.matrix(my_x[my_ind, 5])))
+    nn_status <- as.data.frame(my_x[my_ind, 5])
+    nn_info <- as.data.frame(my_x[my_ind, 1:11])
+    if (using_intensity == TRUE) {
+      if (my_add_p_score == 0) {
+        next
+      } else {
+        current_img[r, "knn_3_label"] <- (sum((nn_status$mecp2_p == "P")) / 3) / my_add_p_score
+      }
+    } else {
+      current_img[r, "knn_3_label"] <- sum((nn_status$mecp2_p == "P")) / 3
+    }
+  }
+  write.csv(current_img, paste0("Outputs/knn_analysis/data/img_knn_3_", i, "_df_16_bit_intensity.csv"))
+}
+
+
+```
+
+
+
+
 
 ```{r knn analysis with 5 neighbors}
 p_score <- 0
@@ -1912,7 +1968,7 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 3:5], my_obs[, 3:5], num_neighbors = k_n, distance_func = function(a, b) euclidean_distance_3d(a = my_obs$x, b = my_obs$y, c = my_obs$z), intensity_data = my_x, p_only = TRUE, calc_mean_intensity = TRUE, apply_intensity = TRUE)
+    current_cell_neighbor_mean <- nearest_neighbors(my_x[, 3:5], my_obs[, 3:5], num_neighbors = k_n, distance_func = function(a, b) euclidean_distance_3d(x1 = my_obs$x, y1 = my_obs$y, z1 = my_obs$z), intensity_data = my_x, p_only = TRUE, calc_mean_intensity = TRUE, apply_intensity = TRUE)
     img_means <- c(img_means, current_cell_neighbor_mean)
     current_img[r, "positive_neighborhood_mean"] <- current_cell_neighbor_mean
   }
