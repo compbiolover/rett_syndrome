@@ -219,7 +219,18 @@ nearest_neighbors <- function(data, observation, num_neighbors, distance_func, p
   }
 
   # Calculate distance, considering p for Minkowski
-  dist <- if (is.null(p_val)) apply(data, 1, distance_func, observation) else apply(data, 1, distance_func, observation, p_val)
+  # dist <- if (is.null(p_val)) apply(data, 1, distance_func, observation) else apply(data, 1, distance_func, observation, p_val)
+  
+  dist <- if (distance_func == "euclidean_distance_3d"){
+    euclidean_distance_3d(
+      observation$x, observation$y, observation$z,
+      data$x, data$y, data$z
+    )
+  } else {
+    euclidean_distance(observation$x, observation$y,
+      data$x, data$y)
+  }
+  
 
   # Select neighbors and determine distances
   if (random_num_neighbors) {
@@ -255,10 +266,10 @@ nearest_neighbors <- function(data, observation, num_neighbors, distance_func, p
   return(ret)
 }
 
-euclidean_distance <- function(a, b) {
+euclidean_distance <- function(x1, y1, x2, y2) {
   #  We check that they have the same number of observation
-  if (length(a) == length(b)) {
-    sqrt(sum((a - b)^2))
+  if (length(x) == length(y)) {
+    sqrt(sum((x2-x1)^2 + (y2-y1)^2))
   } else {
     stop("Vectors must be of the same length")
   }
@@ -509,7 +520,7 @@ for (i in 1:length(all_imgs)) {
   for (r in 1:nrow(current_img)) {
     my_obs <- current_img[r, ]
     my_x <- filter(current_img, id != my_obs$id)
-    my_ind <- nearest_neighbors(data = my_x[, 7:8], observation = my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance_3d, apply_intensity = TRUE, p_only = TRUE)[[1]]
+    my_ind <- nearest_neighbors(data = my_x[, 3:5], observation = my_obs[, 3:5], num_neighbors = 3, distance_func = euclidean_distance_3d, apply_intensity = TRUE, p_only = TRUE)[[1]]
 
     my_dist <- nearest_neighbors(my_x[, 7:8], my_obs[, 7:8], num_neighbors = 3, distance_func = euclidean_distance, apply_intensity = TRUE)[[2]]
     if (using_intensity == TRUE) {
@@ -2079,6 +2090,146 @@ for (i in 1:length(all_imgs)){
 }
 ```
 
+# Doing it with corrected 3D euclidean calculation
+```{r 3d data volin plot distribution complete 6WO data corrected 3d euclidean calculation}
+threed_data <- read.csv("Data/Old data/Jacob/3D_MECP2_6WO_combined_dataset.csv")
+threed_data <- threed_data %>%
+  select(Filename, Mean, CX..pix., CY..pix., CZ..pix.) %>%
+  rename_all(tolower) %>%
+  rename(
+    x = cx..pix.,
+    y = cy..pix.,
+    z = cz..pix.
+  ) %>%
+  mutate(hemisphere = str_extract(filename, "(LH|RH)")) %>%
+  mutate(condition = str_extract(filename, "(NW|NH|SW|SH)")) %>%
+  mutate(mecp2_p = "P") %>%
+  mutate(id = 1:nrow(.))
+
+threed_data <- threed_data %>% group_by(filename)
+all_imgs <- threed_data %>% group_split(threed_data)
+
+
+img_means <- c()
+k_neighbors <- 5
+for (i in 1:length(all_imgs)) {
+  for (r in 1:nrow(df)) {
+    observation <- df[r, ]
+    other_points <- df[-r, ]
+    distances <- euclidean_distance_3d(
+      observation$x, observation$y, observation$z,
+      other_points$x, other_points$y, other_points$z
+    )
+    k_nearest_indices <- order(distances)[1:k_neighbors]
+    k_nearest_points <- other_points[k_nearest_indices, ]
+
+    print(paste("Nearest", k_neighbors, "neighbors for row", r, ":"))
+    print(k_nearest_points)
+  }
+}
+
+
+
+all_dfs <- vector(mode = "list", length = length(all_imgs))
+for (i in 1:length(all_imgs)) {
+  current_df <- read.csv(paste0("Outputs/knn_analysis/data/3d_data/img_", i, "_knn_", k_n, "_df_16_bit_mean_neighborhood_analysis_complete_dataset.csv"))
+  all_dfs[[i]] <- current_df
+}
+
+mean_neighbor_df <- bind_rows(all_dfs)
+mean_neighbor_df <- mean_neighbor_df %>%
+  mutate(cohort = str_extract(filename, "(051222|051822|052922|102319|112421|121119)")) %>%
+  select(-X) %>%
+  select(filename, id, mean, cohort, x, y, z, everything())
+
+
+# Trying a slightly different analysis with doing the same scatter plot stuff as the color coding but for the violin plots
+all_imgs <- list()
+counter <- 1
+mean_neighbor_df_simplified <- mean_neighbor_df
+mean_neighbor_df_simplified <- mean_neighbor_df_simplified %>%
+  mutate(filename = match(filename, unique(filename)))
+
+for (i in unique(mean_neighbor_df_simplified$condition)) {
+  current_cond <- filter(mean_neighbor_df_simplified, condition == i)
+  current_cond$filename <- as.factor(current_cond$filename)
+
+  # Test for normality using Shapiro-Wilk test
+  shapiro_test <- shapiro.test(current_cond$positive_neighborhood_mean)
+  if (shapiro_test$p.value >= 0.05) {
+    # Data is normally distributed
+    print("Data is normally distributed")
+
+    # Perform Levene's test for homogeneity of variances
+    levene_test <- leveneTest(positive_neighborhood_mean ~ filename, data = current_cond)
+    print(levene_test)
+
+    p_value <- levene_test$"Pr(>F)"[1] # Get the p-value from the test
+    p_value_text <- ifelse(p_value < 0.05, paste0("p = ", format(p_value, scientific = FALSE, digits = 3)), "NS")
+  } else {
+    # Data is not normally distributed
+    print("Data is not normally distributed")
+
+    # Perform Fligner-Killeen test for homogeneity of variances
+    fligner_test <- fligner.test(positive_neighborhood_mean ~ filename, data = current_cond)
+    print(fligner_test)
+    
+    
+    kw_test <- kruskal.test(positive_neighborhood_mean ~ filename, data = current_cond)
+    print(kw_test)
+
+    p_value <- fligner_test$p.value
+    p_value_kw <- kw_test$p.value
+    p_value_text <- ifelse(p_value < 0.05, paste0("p = ", format(p_value, scientific = TRUE, digits = 3)), "NS")
+    # p_value_text <- ifelse(p_value_kw < 0.05, paste0("p = ", format(p_value_kw, scientific = TRUE, digits = 3)), "NS")
+  }
+
+
+
+  p1 <- ggplot(aes(x = filename, y = positive_neighborhood_mean), data = current_cond) +
+    geom_violin(draw_quantiles = c(0.25, 0.50, 0.75)) +
+    geom_sina(aes(colour = filename))+
+    theme(
+      panel.background = element_blank(),
+      axis.title = element_text(size = 18),
+      axis.text = element_text(size = 16),
+      axis.ticks.length = unit(0.2, units = "cm"),
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+      axis.line = element_line(color = "black", lineend = "round", linewidth = 1.25),
+      legend.title = element_blank(),
+      legend.text = element_blank(),
+      legend.key = element_blank(),
+      legend.position = "none"
+    ) +
+    ggtitle(paste0("K = 5 | ", current_cond$condition, " | ", p_value_text, " | 3D")) +
+    xlab("Image") +
+    ylab("+ Neighborhood Mean") +
+    coord_flip()
+  all_imgs[[counter]] <- p1
+  counter <- counter + 1
+}
+
+
+
+p2 <- ggarrange(all_imgs[[4]],
+  all_imgs[[3]],
+  all_imgs[[2]],
+  all_imgs[[1]],
+  ncol = 2,
+  nrow = 2,
+  align = "hv",
+  labels = "AUTO"
+)
+
+
+# Saving combo plot as PNG
+ggsave(p2, filename = "positive_neighborhood_mean_violin_plot_by_cond_and_img_with_p_values_fk_3d_complete_dataset.png", device = "png", path = "Outputs/", width = 8.5, height = 8.5, dpi = 600, units = "in", bg = "white")
+
+# Saving each individual plot as SVG
+for (i in 1:length(all_imgs)){
+  ggsave(all_imgs[[i]], filename = paste0("positive_neighborhood_mean_violin_plot_by_cond_and_img_with_p_values_fk_3d_complete_dataset_",i,".svg"), device = "svg", path = "Outputs/", width = 8, height = 8, dpi = 600, units = "in", bg = "white" )
+}
+```
 
 # Doing Mean Intensity by image sina plots 2D
 ```{r mean intensity by image sina plots 2d}
