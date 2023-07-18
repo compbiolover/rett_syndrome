@@ -3,7 +3,9 @@
 # modular code. To also speed up code
 # Author: Andrew Willems <awillems@vols.utk.edu>
 
-# Loading packages
+
+
+# ---- Loading packages ----
 pacman::p_load(
   car, # Tools for performing specific statistical tests
   caret, # Tools for training and evaluating predictive models
@@ -23,7 +25,7 @@ pacman::p_load(
   tidyverse # Collection of packages for data manipulation and visualization
 )
 
-
+# ---- Loading Functions ----
 #' Euclidean Distance 2D Function
 #'
 #' Calculate the Euclidean distance between two points in 2 dimensions (x, y).
@@ -84,9 +86,31 @@ euclidean_distance_3d <- function(x1, y1, z1, x2, y2, z2) {
   sqrt((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)
 }
 
-
-
-# Permutation analysis
+#' Perform permutation analysis using KNN
+#'
+#' This function performs a permutation analysis using KNN (K-Nearest Neighbors) for a given set of images.
+#'
+#' @param all_imgs A list of data frames containing the images for analysis.
+#' @param num_nearest The number of nearest neighbors to consider in the KNN analysis. Default is 30.
+#' @param custom_seed The custom seed value for random number generation. If not provided, a random seed will be generated using the system time.
+#' @param k The number of neighbors to consider when performing regular KNN analysis. Default is 5.
+#' @param apply_intensity Logical value indicating whether to calculate distances with intensity information. Default is TRUE.
+#' @param p_only Logical value indicating whether to calculate updated distances with intensity information only for positive (mecp2_p = P) neighbors. Default is TRUE.
+#' @param calc_mean_intensity Logical value indicating whether to calculate the mean intensity of positive neighbors. Default is TRUE.
+#' @param num_iterations The number of iterations to perform in the permutation analysis. Default is 1000.
+#' @param num_cores The number of CPU cores to use for parallel processing. If not provided, it will be automatically determined. Default is NULL.
+#' @param random_num_neighbors Logical value indicating whether to randomly select the number of neighbors from the num_nearest neighbors. Default is FALSE.
+#' @param max_randomness Logical value indicating whether to randomly select k neighbors without considering distances. Default is FALSE.
+#'
+#' @return A data frame containing the results of the permutation analysis, including correlation values, p-values, conditions, time points, and other parameters.
+#'
+#' @examples
+#' # Perform permutation analysis with default parameters
+#' #' results <- permutation_knn_analysis(all_imgs)
+#'
+#' # Perform permutation analysis with custom parameters
+#' results <- permutation_knn_analysis(all_imgs, num_nearest = 50, custom_seed = 1689014354, k = 10, num_iterations = 500)
+#'
 permutation_knn_analysis <- function(all_imgs,
                                      num_nearest = 30,
                                      custom_seed = 1689014354,
@@ -126,7 +150,6 @@ permutation_knn_analysis <- function(all_imgs,
   }
   
   
-  
   # Create a progress bar
   pb <- progress_bar$new(total = num_iterations, width = 60)
   
@@ -140,6 +163,19 @@ permutation_knn_analysis <- function(all_imgs,
     # Create an empty vector to store the iteration results
     iteration_rhos <- vector()
     iteration_p_values <- vector()
+    
+    # Check all_imgs dimensions to make sure it has enough observations to be used with this size of KNNs. Remove if not
+    # and print message to console saying this image was removed
+    for (i in seq_along(all_imgs)){
+      current_img <- all_imgs[[i]]
+      if (dim(current_img)[1] < num_nearest){
+        all_imgs[[i]] <- NULL
+        cat("Image", i, "had", dim(current_img)[1], "observations which is fewer observations than our current search value (",num_nearest,"). It was removed.\n")
+      }
+    }
+    
+    # Remove all NULL images from our larger image list
+    all_imgs <- Filter(function(x) !is.null(x), all_imgs)
     
     # Loop through each image
     for (i in seq_along(all_imgs)) {
@@ -227,7 +263,7 @@ permutation_knn_analysis <- function(all_imgs,
       p_values[i] <- cor_res$p.value
       
       # Store the iteration results in the results list
-      results[[paste0("Iteration ", result_index)]] <- data.frame(image = img_counter,
+      results[[paste0("Iteration ", result_index)]] <- data.frame(image = unique(df$filename),
                                                               rho = rhos[i],
                                                               p_value = p_values[i],
                                                               condition = unique(df$condition),
@@ -242,13 +278,9 @@ permutation_knn_analysis <- function(all_imgs,
       
     }
     
-    # iteration_rhos <- c(iteration_rhos, rhos)
-    # iteration_p_values <- c(iteration_p_values, p_values)
-    
     # Update the progress bar
     pb$tick()
     img_counter <- img_counter + 1
-    # print(results)
   }
   
   # Combine the iteration results into a single data frame
@@ -257,138 +289,6 @@ permutation_knn_analysis <- function(all_imgs,
   # Return the result data frame
   return(result_df)
 }
-
-
-
-
-
-
-
-# 6 week data
-six_wk_data <- read.csv("Data/Old data/Jacob/3D_MECP2_6WO_combined_dataset.csv")
-six_wk_data <- six_wk_data %>%
-  select(Filename, Mean, CX..pix., CY..pix., CZ..pix., MECP2) %>%
-  rename_all(tolower) %>%
-  rename(
-    x = cx..pix.,
-    y = cy..pix.,
-    z = cz..pix.,
-    mecp2_p = mecp2
-  ) %>%
-  mutate(hemisphere = str_extract(filename, "(LH|RH)")) %>%
-  mutate(condition = str_extract(filename, "(NW|NH|SW|SH)")) %>%
-  filter(mecp2_p == "P") %>%
-  mutate(id = 1:nrow(.)) %>%
-  mutate(time = 6) %>%
-  # Modify this line to filter by different condition
-  filter(condition == "SW")
-
-six_wk_data <- six_wk_data %>% group_by(filename)
-all_imgs <- six_wk_data %>% group_split(six_wk_data)
-
-# 12 week data
-twelve_wk_data <- read.csv("Data/Old data/Jacob/12WOcombined_output_MECP2.csv")
-twelve_wk_data <- twelve_wk_data %>%
-  select(Image, CX..pix., CY..pix., CZ..pix., Condition, Hemishphere, MECP2, Mean) %>%
-  rename(
-    x = CX..pix.,
-    y = CY..pix.,
-    z = CZ..pix.,
-    mecp2_p = MECP2
-  ) %>%
-  rename_all(tolower) %>%
-  filter(mecp2_p == "P") %>%
-  mutate(id = 1:nrow(.)) %>%
-  mutate(time = 12) %>%
-  mutate(hemishphere = str_extract(image, "(LW|RW)")) %>%
-  mutate(hemishphere = ifelse(grepl("LW", hemishphere), gsub("LW", "LH", hemishphere), hemishphere)) %>%
-  mutate(hemishphere = ifelse(grepl("RW", hemishphere), gsub("RW", "RH", hemishphere), hemishphere)) %>%
-  # Modify this line to filter by different condition
-  filter(condition == "NW")
-
-twelve_wk_data <- twelve_wk_data %>% group_by(image)
-all_imgs <- twelve_wk_data %>% group_split(twelve_wk_data)
-
-
-# NW 10000 permutations at 30 search space
-nw_results_10000_30 <- permutation_knn_analysis(all_imgs,
-                                         num_nearest = 30,
-                                         custom_seed = 1689016866,
-                                         k = 5,
-                                         num_iterations = 10000,
-                                         num_cores = 1,
-                                         random_num_neighbors = TRUE,
-                                         max_randomness = FALSE,
-                                         apply_intensity = TRUE,
-                                         p_only = TRUE,
-                                         calc_mean_intensity = TRUE)
-
-
-# NW 10000 permutations at 5-50 search space with steps of 5
-search_space <- seq(5, 50, 5)
-all_nw_searches <- list()
-for (s in search_space){
-  current_search <- permutation_knn_analysis(all_imgs,
-                                                  num_nearest = s,
-                                                  custom_seed = 1689016866,
-                                                  k = 5,
-                                                  num_iterations = 10000,
-                                                  num_cores = 1,
-                                                  random_num_neighbors = TRUE,
-                                                  max_randomness = FALSE,
-                                                  apply_intensity = TRUE,
-                                                  p_only = TRUE,
-                                                  calc_mean_intensity = TRUE) 
-  
-  # Append the result of the new search space to all results
-  all_nw_searches[[paste0("Search ", s)]] <- current_search
-}
-
-
-
-
-# NH 10000 permutations at 5-50 search space with steps of 5
-search_space <- seq(5, 50, 5)
-all_nh_searches <- list()
-for (s in search_space){
-  current_search <- permutation_knn_analysis(all_imgs,
-                                             num_nearest = s,
-                                             custom_seed = 1689016866,
-                                             k = 5,
-                                             num_iterations = 10000,
-                                             num_cores = 1,
-                                             random_num_neighbors = TRUE,
-                                             max_randomness = FALSE,
-                                             apply_intensity = TRUE,
-                                             p_only = TRUE,
-                                             calc_mean_intensity = TRUE) 
-  
-  # Append the result of the new search space to all results
-  all_nh_searches[[paste0("Search ", s)]] <- current_search
-}
-
-
-# SW 10000 permutations at 5-50 search space with steps of 5
-search_space <- seq(5, 50, 5)
-all_sw_searches <- list()
-for (s in search_space){
-  current_search <- permutation_knn_analysis(all_imgs,
-                                             num_nearest = s,
-                                             custom_seed = 1689016866,
-                                             k = 5,
-                                             num_iterations = 1000,
-                                             num_cores = 1,
-                                             random_num_neighbors = TRUE,
-                                             max_randomness = FALSE,
-                                             apply_intensity = TRUE,
-                                             p_only = TRUE,
-                                             calc_mean_intensity = TRUE) 
-  
-  # Append the result of the new search space to all results
-  all_sw_searches[[paste0("Search ", s)]] <- current_search
-}
-
-
 
 
 
@@ -421,7 +321,7 @@ plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, b
   library(ggplot2)
   library(grid)
   library(scales)
-
+  
   time_point <- unique(data$time)
   k_value <- unique(data$k)
   num_permutations <- unique(data$num_iterations)
@@ -430,7 +330,7 @@ plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, b
   
   # Calculate the scaling factor for text elements based on plot size and base plot size
   text_scale <- plot_size / base_plot_size
-
+  
   p <- ggplot(data = data, aes(x = rho)) +
     geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
     theme(
@@ -448,44 +348,122 @@ plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, b
     ylab("Count") +
     scale_y_continuous(expand = c(0, 0)) +
     geom_vline(xintercept = x_intercept, color = line_color)
-
-
+  
+  
   # Calculate the width and height for the plot
   width <- plot_size * dpi
   height <- plot_size * dpi
-
+  
   # Convert width and height to inches
   width_inches <- width / dpi
   height_inches <- height / dpi
-
+  
   # Print width and height to the console
   message(paste0("Saving plot ", filename, " with width equal to ", width_inches, " inches and height equal to ", height_inches, " inches"))
-
+  
   # Save as SVG
   ggsave(plot = p, filename = paste0(filename, ".svg"), device = "svg", width = width, height = height, units = "px", dpi = dpi, path = "Outputs/knn_analysis/plots/")
-
+  
   # Save as PNG
   ggsave(plot = p, filename = paste0(filename, ".png"), device = "png", width = width, height = height, units = "px", dpi = dpi, path = "Outputs/knn_analysis/plots/")
-
+  
   # Return the plot
   return(p)
 }
 
-# Call the function for each dataset with custom parameters
-nh_plot <- plot_permutation_test(nh_data, "nh_random_knn_vs_rho_histogram", 0.17,
-  plot_size = 4, base_plot_size = 8, dpi = 300, hist_color = "blue",
-  hist_fill = "lightblue", line_color = "green", text_color = "green"
-)
-nw_plot <- plot_permutation_test(all_nw_searches[[1]], "nw_random_knn_vs_rho_histogram_10_10000", 0.27,
-  plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
-  hist_fill = "lightblue", line_color = "red", text_color = "red"
-)
 
 
+# ---- Loading Data ----
+# 6 week data
+six_wk_data <- read.csv("Data/Old data/Jacob/3D_MECP2_6WO_combined_dataset.csv")
+six_wk_data <- six_wk_data %>%
+  select(Filename, Mean, CX..pix., CY..pix., CZ..pix., MECP2) %>%
+  rename_all(tolower) %>%
+  rename(
+    x = cx..pix.,
+    y = cy..pix.,
+    z = cz..pix.,
+    mecp2_p = mecp2
+  ) %>%
+  mutate(hemisphere = str_extract(filename, "(LH|RH)")) %>%
+  mutate(condition = str_extract(filename, "(NW|NH|SW|SH)")) %>%
+  filter(mecp2_p == "P") %>%
+  mutate(id = 1:nrow(.)) %>%
+  mutate(time = 6)
+
+six_wk_data <- six_wk_data %>% group_by(filename)
+all_imgs <- six_wk_data %>% group_split(six_wk_data)
+
+# 12 week data
+twelve_wk_data <- read.csv("Data/Old data/Jacob/12WOcombined_output_MECP2.csv")
+twelve_wk_data <- twelve_wk_data %>%
+  select(Image, CX..pix., CY..pix., CZ..pix., Condition, Hemishphere, MECP2, Mean) %>%
+  rename(
+    x = CX..pix.,
+    y = CY..pix.,
+    z = CZ..pix.,
+    mecp2_p = MECP2
+  ) %>%
+  rename_all(tolower) %>%
+  filter(mecp2_p == "P") %>%
+  mutate(id = 1:nrow(.)) %>%
+  mutate(time = 12) %>%
+  mutate(hemishphere = str_extract(image, "(LW|RW)")) %>%
+  mutate(hemishphere = ifelse(grepl("LW", hemishphere), gsub("LW", "LH", hemishphere), hemishphere)) %>%
+  mutate(hemishphere = ifelse(grepl("RW", hemishphere), gsub("RW", "RH", hemishphere), hemishphere))
+
+twelve_wk_data <- twelve_wk_data %>% group_by(image)
+all_imgs <- twelve_wk_data %>% group_split(twelve_wk_data)
+
+
+
+
+# ---- Permutation Test Across Search Space ----
+# All conditions 1000 permutations at 5-50 search space with steps of 5
+search_space <- seq(5, 50, 5)
+conds <- c("NW", "NH", "SW", "SH")
+all_current_cond_searches <- list()
+all_searches <- list()
+counter <- 1
+
+for (c in conds) {
+  current_cond <- six_wk_data %>%
+    filter(condition == c)
+
+  current_cond <- current_cond %>% group_by(filename)
+  all_imgs <- current_cond %>% group_split(current_cond)
+
+  all_current_cond_searches <- list()  # Create a new list for each condition
+  
+  for (s in search_space) {
+    current_search <- permutation_knn_analysis(all_imgs,
+      num_nearest = s,
+      custom_seed = 1689016866,
+      k = 5,
+      num_iterations = 10,
+      num_cores = 1,
+      random_num_neighbors = TRUE,
+      max_randomness = FALSE,
+      apply_intensity = TRUE,
+      p_only = TRUE,
+      calc_mean_intensity = TRUE
+    )
+
+    # Append the result of the new search space to all results
+    all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
+    write.csv(current_search, sep = ",", file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",unique(current_search$condition),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
+  }
+  
+  all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
+  counter <- counter + 1
+}
+
+
+# ---- Plotting Results ----
 # Looping through all outputs again to make comboplot for easier comparison of results
-combo_plot_list <- vector("list", length = length(all_nw_searches))
-for (s in 1:length(all_nw_searches)){
-  combo_plot_list[[s]] <- plot_permutation_test(all_nw_searches[[s]], paste0("nw_random_knn_vs_rho_histogram_",s,"_10000"), 0.27,
+combo_plot_list <- vector("list", length = length(all_searches[[1]]))
+for (s in 1:length(all_searches[[2]])){
+  combo_plot_list[[s]] <- plot_permutation_test(all_searches[[1]][[s]], paste0("nw_random_knn_vs_rho_histogram_",s,"_1000"), 0.27,
                                                 plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
                                                 hist_fill = "lightblue", line_color = "red", text_color = "red"
   )
@@ -501,11 +479,4 @@ combo_plot <- ggarrange(plotlist = combo_plot_list,
 
 
 # Saving combo plot
-ggsave(plot = combo_plot, device = "png", path = "Outputs/knn_analysis/plots/", filename = "nw_random_searches_10000_combo.png", units = "in", dpi = 600, width = 8, height = 8)
-
-
-
-sh_plot <- plot_permutation_test(sh_data, "sh_random_knn_vs_rho_histogram_test", 0.58,
-  plot_size = 2.5, base_plot_size = 8, dpi = 300, hist_color = "gray",
-  hist_fill = "lightgray", line_color = "brown", text_color = "brown", num_bins = 5
-)
+ggsave(plot = combo_plot, device = "png", path = "Outputs/knn_analysis/plots/", filename = "nw_random_searches_1000_combo.png", units = "in", dpi = 600, width = 8, height = 8)
