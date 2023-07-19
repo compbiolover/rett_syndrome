@@ -91,7 +91,7 @@ euclidean_distance_3d <- function(x1, y1, z1, x2, y2, z2) {
 #' This function performs a permutation analysis using KNN (K-Nearest Neighbors) for a given set of images.
 #'
 #' @param all_imgs A list of data frames containing the images for analysis.
-#' @param num_nearest The number of nearest neighbors to consider in the KNN analysis. Default is 30.
+#' @param num_nearest The number of nearest neighbors to consider in the KNN analysis. Default is 30. Set to "max_randomness" if max_randomness is TRUE.
 #' @param custom_seed The custom seed value for random number generation. If not provided, a random seed will be generated using the system time.
 #' @param k The number of neighbors to consider when performing regular KNN analysis. Default is 5.
 #' @param apply_intensity Logical value indicating whether to calculate distances with intensity information. Default is TRUE.
@@ -165,17 +165,19 @@ permutation_knn_analysis <- function(all_imgs,
     iteration_p_values <- vector()
     
     # Check all_imgs dimensions to make sure it has enough observations to be used with this size of KNNs. Remove if not
-    # and print message to console saying this image was removed
-    for (i in seq_along(all_imgs)){
-      current_img <- all_imgs[[i]]
-      if (dim(current_img)[1] < num_nearest){
-        all_imgs[[i]] <- NULL
-        cat("Image", i, "had", dim(current_img)[1], "observations which is fewer observations than our current search value (",num_nearest,"). It was removed.\n")
+    # and print message to console saying this image was removed. Only done if max_randomness is FALSE.
+    if (max_randomness == FALSE){
+      for (i in seq_along(all_imgs)){
+        current_img <- all_imgs[[i]]
+        if (dim(current_img)[1] < num_nearest){
+          all_imgs[[i]] <- NULL
+          cat("Image", i, "had", dim(current_img)[1], "observations which is fewer observations than our current search value (",num_nearest,"). It was removed.\n")
+        }
       }
+      
+      # Remove all NULL images from our larger image list
+      all_imgs <- Filter(function(x) !is.null(x), all_imgs)
     }
-    
-    # Remove all NULL images from our larger image list
-    all_imgs <- Filter(function(x) !is.null(x), all_imgs)
     
     # Loop through each image
     for (i in seq_along(all_imgs)) {
@@ -205,12 +207,6 @@ permutation_knn_analysis <- function(all_imgs,
           k_nearest_indices <- sample(k_nearest_indices, replace = TRUE)
           # Then pass the randomly selected indices from the num_nearest neighbors to the other points
           k_nearest_points <- other_points[k_nearest_indices, ]
-          
-          # For max randomness
-          if (max_randomness){
-            k_nearest_indices <- sample(nrow(other_points), k, replace = TRUE)
-            k_nearest_points <- other_points[k_nearest_indices, ]
-          }
         } else {
           # Perform regular KNN analysis with no randomness
           distances <- euclidean_distance_3d(
@@ -219,6 +215,13 @@ permutation_knn_analysis <- function(all_imgs,
           )
           k_nearest_indices <- order(distances)[1:k]
           k_nearest_points <- other_points[k_nearest_indices, ]
+        }
+        
+        # For max randomness
+        if (max_randomness){
+          k_nearest_indices <- sample(nrow(other_points), k, replace = TRUE)
+          k_nearest_points <- other_points[k_nearest_indices, ]
+          num_nearest <- "max_randomness"
         }
         
         # Calculating other parts of the score beyond just KNN
@@ -315,58 +318,85 @@ permutation_knn_analysis <- function(all_imgs,
 #' @import scales
 #'
 #' @export
-plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, base_plot_size = 8, dpi = 600, hist_color = "steelblue",
+plot_permutation_test <- function(data, filename, x_intercept = NULL, plot_size = 10, base_plot_size = 8, dpi = 600, hist_color = "steelblue",
                                   hist_fill = "steelblue", num_bins = 30, line_color = "red", text_color = "red") {
   # Required packages
   library(ggplot2)
   library(grid)
   library(scales)
-  
+
+  # Extracting the relevant pieces of data that will be used in building the plot
   time_point <- unique(data$time)
   k_value <- unique(data$k)
   num_permutations <- unique(data$num_iterations)
   num_ks <- unique(data$k_search_space)
-  
-  
+
+  # Modifying the title of plots that are generated with max randomness
+  if (num_ks == "max_randomness") {
+    num_ks <- "All"
+  }
+
+
   # Calculate the scaling factor for text elements based on plot size and base plot size
   text_scale <- plot_size / base_plot_size
-  
-  p <- ggplot(data = data, aes(x = rho)) +
-    geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
-    theme(
-      panel.background = element_blank(),
-      axis.title = element_text(size = 18 * text_scale, face = "bold"),
-      axis.text = element_text(size = 16 * text_scale),
-      axis.ticks = element_line(linewidth = 1.25 * text_scale),
-      axis.ticks.length = unit(0.2, units = "cm") * text_scale,
-      strip.text = element_text(size = 18 * text_scale, face = "bold"),
-      plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
-      axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
-    ) +
-    ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched" )) +
-    xlab(expression(rho)) +
-    ylab("Count") +
-    scale_y_continuous(expand = c(0, 0)) +
-    geom_vline(xintercept = x_intercept, color = line_color)
-  
-  
+
+  # If the x_intercept parameter is NULL don't plot a vertical line at all but build the rest of the plot
+  if (is.null(x_intercept)) {
+    # Build the plot
+    p <- ggplot(data = data, aes(x = rho)) +
+      geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
+      theme(
+        panel.background = element_blank(),
+        axis.title = element_text(size = 18 * text_scale, face = "bold"),
+        axis.text = element_text(size = 16 * text_scale),
+        axis.ticks = element_line(linewidth = 1.25 * text_scale),
+        axis.ticks.length = unit(0.2, units = "cm") * text_scale,
+        strip.text = element_text(size = 18 * text_scale, face = "bold"),
+        plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
+        axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
+      ) +
+      ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched")) +
+      xlab(expression(rho)) +
+      ylab("Count") +
+      scale_y_continuous(expand = c(0, 0)) +
+      geom_vline(xintercept = x_intercept, color = line_color)
+  } else {
+    # Build the plot
+    p <- ggplot(data = data, aes(x = rho)) +
+      geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
+      theme(
+        panel.background = element_blank(),
+        axis.title = element_text(size = 18 * text_scale, face = "bold"),
+        axis.text = element_text(size = 16 * text_scale),
+        axis.ticks = element_line(linewidth = 1.25 * text_scale),
+        axis.ticks.length = unit(0.2, units = "cm") * text_scale,
+        strip.text = element_text(size = 18 * text_scale, face = "bold"),
+        plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
+        axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
+      ) +
+      ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched")) +
+      xlab(expression(rho)) +
+      ylab("Count") +
+      scale_y_continuous(expand = c(0, 0))
+  }
+
   # Calculate the width and height for the plot
   width <- plot_size * dpi
   height <- plot_size * dpi
-  
+
   # Convert width and height to inches
   width_inches <- width / dpi
   height_inches <- height / dpi
-  
+
   # Print width and height to the console
   message(paste0("Saving plot ", filename, " with width equal to ", width_inches, " inches and height equal to ", height_inches, " inches"))
-  
+
   # Save as SVG
   ggsave(plot = p, filename = paste0(filename, ".svg"), device = "svg", width = width, height = height, units = "px", dpi = dpi, path = "Outputs/knn_analysis/plots/")
-  
+
   # Save as PNG
   ggsave(plot = p, filename = paste0(filename, ".png"), device = "png", width = width, height = height, units = "px", dpi = dpi, path = "Outputs/knn_analysis/plots/")
-  
+
   # Return the plot
   return(p)
 }
@@ -440,7 +470,7 @@ for (c in conds) {
       num_nearest = s,
       custom_seed = 1689016866,
       k = 5,
-      num_iterations = 10,
+      num_iterations = 1000,
       num_cores = 1,
       random_num_neighbors = TRUE,
       max_randomness = FALSE,
@@ -459,24 +489,135 @@ for (c in conds) {
 }
 
 
-# ---- Plotting Results ----
-# Looping through all outputs again to make comboplot for easier comparison of results
-combo_plot_list <- vector("list", length = length(all_searches[[1]]))
-for (s in 1:length(all_searches[[2]])){
-  combo_plot_list[[s]] <- plot_permutation_test(all_searches[[1]][[s]], paste0("nw_random_knn_vs_rho_histogram_",s,"_1000"), 0.27,
-                                                plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
-                                                hist_fill = "lightblue", line_color = "red", text_color = "red"
+# ---- Plotting Semi-random Results ----
+# Looping through all outputs again to make combo plot for easier comparison of results
+combo_plot_list <- list()
+observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
+
+for (c in 1:length(observed_rhos)) {
+  observed_rho <- observed_rhos[c]
+  for (s in 1:length(all_searches[[2]])) {
+    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(conds[c], "_random_knn_vs_rho_histogram_", s, "_1000"), observed_rho,
+      plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
+      hist_fill = "lightblue", line_color = "red", text_color = "red"
+    )
+  }
+  
+  # Making combo plot
+  combo_plot <- ggarrange(plotlist = combo_plot_list,
+                          ncol = 2,
+                          nrow = 5,
+                          labels = "AUTO",
+                          align = "hv", 
+                          font.label = list(size = 18, face = "bold"))
+  
+  
+  # Saving combo plot in PNG
+  ggsave(plot = combo_plot,
+         device = "png",
+         path = "Outputs/knn_analysis/plots/", 
+         filename = paste0(conds[c],"_random_searches_1000_combo.png"),
+         units = "in",
+         dpi = 600,
+         width = 8,
+         height = 8)
+  
+  
+  # Saving combo plot in SVG
+  ggsave(plot = combo_plot,
+         device = "svg",
+         path = "Outputs/knn_analysis/plots/", 
+         filename = paste0(conds[c],"_random_searches_1000_combo.svg"),
+         units = "in",
+         dpi = 600,
+         width = 8,
+         height = 8)
+  
+  # Reset the combo list
+  combo_plot_list <- list()
+}
+
+
+# ---- Permutation Test with Max Randomness ----
+# All conditions 1000 permutations at max randomness
+conds <- c("NW", "NH", "SW", "SH")
+all_conds <- list()
+
+# Loop through each condition and subset to it before performing permutation analysis
+for (c in conds) {
+  current_cond <- six_wk_data %>%
+    filter(condition == c)
+
+  current_cond <- current_cond %>% group_by(filename)
+  all_imgs <- current_cond %>% group_split(current_cond)
+
+  all_current_cond_searches <- list() # Create a new list for each condition
+
+  current_cond_perm <- permutation_knn_analysis(all_imgs,
+    custom_seed = 1689016866,
+    k = 5,
+    num_iterations = 1000,
+    num_cores = 1,
+    random_num_neighbors = FALSE,
+    max_randomness = TRUE,
+    apply_intensity = TRUE,
+    p_only = TRUE,
+    calc_mean_intensity = TRUE
+  )
+  
+  all_conds[[paste0(c)]] <- current_cond_perm
+  
+  # Save the results
+  write.csv(current_cond_perm, file = paste0("Outputs/knn_analysis/data/random_analysis/", unique(current_cond_perm$condition), "_", "max_randomness_", unique(current_cond_perm$num_iterations), "_num_iterations.csv"))
+}
+
+# ---- Plotting  Max Random Results ----
+# Looping through all outputs again to make combo plot for easier comparison of results
+combo_plot_list <- list()
+observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
+
+for (c in 1:length(observed_rhos)) {
+  observed_rho <- observed_rhos[c]
+  combo_plot_list[[paste0(c)]] <- plot_permutation_test(all_conds[[c]], paste0(conds[c], "_max_random_knn_vs_rho_histogram_1000"), observed_rho,
+    plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
+    hist_fill = "lightblue", line_color = "red", text_color = "red"
   )
 }
 
 # Making combo plot
-combo_plot <- ggarrange(plotlist = combo_plot_list,
-                        ncol = 2,
-                        nrow = 5,
-                        labels = "AUTO",
-                        align = "hv", 
-                        font.label = list(size = 18, face = "bold"))
+combo_plot <- ggarrange(
+  plotlist = combo_plot_list,
+  ncol = 2,
+  nrow = 2,
+  labels = "AUTO",
+  align = "hv",
+  font.label = list(size = 18, face = "bold")
+)
 
 
-# Saving combo plot
-ggsave(plot = combo_plot, device = "png", path = "Outputs/knn_analysis/plots/", filename = "nw_random_searches_1000_combo.png", units = "in", dpi = 600, width = 8, height = 8)
+# Saving combo plot in PNG
+ggsave(
+  plot = combo_plot,
+  device = "png",
+  path = "Outputs/knn_analysis/plots/",
+  filename = paste0("combo_max_random_searches_1000_combo.png"),
+  units = "in",
+  dpi = 600,
+  width = 8,
+  height = 8
+)
+
+
+# Saving combo plot in SVG
+ggsave(
+  plot = combo_plot,
+  device = "svg",
+  path = "Outputs/knn_analysis/plots/",
+  filename = paste0("combo_max_random_searches_1000_combo.svg"),
+  units = "in",
+  dpi = 600,
+  width = 8,
+  height = 8
+)
+
+
