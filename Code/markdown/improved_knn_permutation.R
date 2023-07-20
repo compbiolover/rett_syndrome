@@ -641,7 +641,7 @@ for (c in conds) {
                                                num_nearest = s,
                                                custom_seed = 1689016866,
                                                k = 5,
-                                               num_iterations = 10,
+                                               num_iterations = 1000,
                                                num_cores = 1,
                                                random_num_neighbors = TRUE,
                                                max_randomness = FALSE,
@@ -663,7 +663,7 @@ for (c in conds) {
 # ---- Plotting 12 Week Semi-random Results ----
 # Looping through all outputs again to make combo plot for easier comparison of results
 combo_plot_list <- list()
-observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
+observed_rhos <- c(0.23, 0.17, 0.34, 0.26)
 
 for (c in 1:length(observed_rhos)) {
   observed_rho <- observed_rhos[c]
@@ -745,7 +745,7 @@ for (c in conds) {
 # ---- Plotting 12 Week Max Random Results ----
 # Looping through all outputs again to make combo plot for easier comparison of results
 combo_plot_list <- list()
-observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
+observed_rhos <- c(0.23, 0.17, 0.34, 0.26)
 
 for (c in 1:length(observed_rhos)) {
   observed_rho <- observed_rhos[c]
