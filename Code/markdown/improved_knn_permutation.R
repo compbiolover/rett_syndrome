@@ -164,15 +164,24 @@ permutation_knn_analysis <- function(all_imgs,
     iteration_rhos <- vector()
     iteration_p_values <- vector()
     
+    
     # Check all_imgs dimensions to make sure it has enough observations to be used with this size of KNNs. Remove if not
     # and print message to console saying this image was removed. Only done if max_randomness is FALSE.
     if (max_randomness == FALSE){
       for (i in seq_along(all_imgs)){
         current_img <- all_imgs[[i]]
-        if (dim(current_img)[1] < num_nearest){
+        if (dim(current_img)[1] <= num_nearest){
           all_imgs[[i]] <- NULL
-          cat("Image", i, "had", dim(current_img)[1], "observations which is fewer observations than our current search value (",num_nearest,"). It was removed.\n")
+          cat("Image", i, "had", dim(current_img)[1], "observations which is fewer or  an equal number of observations to our current search value (",num_nearest,"). It was removed.\n")
         }
+        
+        # Check all_imgs dimensions to make sure it has enough observations to be used with the number of KNN. Remove if not
+        # and print message to console saying this image was removed because number is less than KNN number being performed.
+        if (dim(current_img)[1] <= k) {
+          all_imgs[[i]] <- NULL
+          cat("Image", i, "had", dim(current_img)[1], "observations which is equal to or fewer observations than our current KNN value (",k,"). It was removed.\n")
+        }
+        
       }
       
       # Remove all NULL images from our larger image list
@@ -203,8 +212,10 @@ permutation_knn_analysis <- function(all_imgs,
           )
           # Then subset to the neighbors within num_nearest with order
           k_nearest_indices <- order(distances)[1:num_nearest]
+          # print(k_nearest_indices)
           # Then sample from these num_nearest neighbors randomly
           k_nearest_indices <- sample(k_nearest_indices, replace = TRUE)
+          # print(k_nearest_indices)
           # Then pass the randomly selected indices from the num_nearest neighbors to the other points
           k_nearest_points <- other_points[k_nearest_indices, ]
         } else {
@@ -224,6 +235,9 @@ permutation_knn_analysis <- function(all_imgs,
           num_nearest <- "max_randomness"
         }
         
+        
+        # print(distances)
+        
         # Calculating other parts of the score beyond just KNN
         add_p_score <- sum((k_nearest_points$mecp2_p == "P")) / k
         observation$knn_label <- add_p_score
@@ -231,7 +245,9 @@ permutation_knn_analysis <- function(all_imgs,
         
         # Calculate distances with intensity information
         if (apply_intensity) {
+          # print(k_nearest_indices)
           distances <- distances[k_nearest_indices]
+          # print(distances)
           distances_updated <- rescale(distances * k_nearest_points$mean, to = c(0, 1))
           distances_updated <- sort(distances_updated, decreasing = FALSE)
           
@@ -254,6 +270,7 @@ permutation_knn_analysis <- function(all_imgs,
       
       # Binding all observations of an image together
       df <- bind_rows(all_data)
+      # print(df)
       
       # Performing the correlation test between the mean and the positive (mecp2_p = P) neighborhood mean of
       # all rows in a particular image
@@ -301,7 +318,7 @@ permutation_knn_analysis <- function(all_imgs,
 #'
 #' @param data The dataframe containing the data to be plotted.
 #' @param filename The filename for saving the plot (without extension).
-#' @param x_intercept The x-coordinate value for the vertical line to be added to the plot.
+#' @param x_intercept The x-coordinate value for the vertical line to be added to the plot. Represents the observed Spearman correlation coefficient seen in the data.
 #' @param plot_size The desired size of the plot (in inches).
 #' @param base_plot_size The base plot size to be used for scaling text elements.
 #' @param dpi The DPI (dots per inch) for the plot.
@@ -318,7 +335,7 @@ permutation_knn_analysis <- function(all_imgs,
 #' @import scales
 #'
 #' @export
-plot_permutation_test <- function(data, filename, x_intercept = NULL, plot_size = 10, base_plot_size = 8, dpi = 600, hist_color = "steelblue",
+plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, base_plot_size = 8, dpi = 600, hist_color = "steelblue",
                                   hist_fill = "steelblue", num_bins = 30, line_color = "red", text_color = "red") {
   # Required packages
   library(ggplot2)
@@ -339,9 +356,7 @@ plot_permutation_test <- function(data, filename, x_intercept = NULL, plot_size 
 
   # Calculate the scaling factor for text elements based on plot size and base plot size
   text_scale <- plot_size / base_plot_size
-
-  # If the x_intercept parameter is NULL don't plot a vertical line at all but build the rest of the plot
-  if (is.null(x_intercept)) {
+  
     # Build the plot
     p <- ggplot(data = data, aes(x = rho)) +
       geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
@@ -360,25 +375,6 @@ plot_permutation_test <- function(data, filename, x_intercept = NULL, plot_size 
       ylab("Count") +
       scale_y_continuous(expand = c(0, 0)) +
       geom_vline(xintercept = x_intercept, color = line_color)
-  } else {
-    # Build the plot
-    p <- ggplot(data = data, aes(x = rho)) +
-      geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
-      theme(
-        panel.background = element_blank(),
-        axis.title = element_text(size = 18 * text_scale, face = "bold"),
-        axis.text = element_text(size = 16 * text_scale),
-        axis.ticks = element_line(linewidth = 1.25 * text_scale),
-        axis.ticks.length = unit(0.2, units = "cm") * text_scale,
-        strip.text = element_text(size = 18 * text_scale, face = "bold"),
-        plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
-        axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
-      ) +
-      ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched")) +
-      xlab(expression(rho)) +
-      ylab("Count") +
-      scale_y_continuous(expand = c(0, 0))
-  }
 
   # Calculate the width and height for the plot
   width <- plot_size * dpi
@@ -440,15 +436,16 @@ twelve_wk_data <- twelve_wk_data %>%
   mutate(time = 12) %>%
   mutate(hemishphere = str_extract(image, "(LW|RW)")) %>%
   mutate(hemishphere = ifelse(grepl("LW", hemishphere), gsub("LW", "LH", hemishphere), hemishphere)) %>%
-  mutate(hemishphere = ifelse(grepl("RW", hemishphere), gsub("RW", "RH", hemishphere), hemishphere))
+  mutate(hemishphere = ifelse(grepl("RW", hemishphere), gsub("RW", "RH", hemishphere), hemishphere)) %>%
+  rename(filename = image)
 
-twelve_wk_data <- twelve_wk_data %>% group_by(image)
+twelve_wk_data <- twelve_wk_data %>% group_by(filename)
 all_imgs <- twelve_wk_data %>% group_split(twelve_wk_data)
 
 
 
 
-# ---- Permutation Test Across Search Space ----
+# ---- 6 Week Permutation Test Across Search Space ----
 # All conditions 1000 permutations at 5-50 search space with steps of 5
 search_space <- seq(5, 50, 5)
 conds <- c("NW", "NH", "SW", "SH")
@@ -481,7 +478,7 @@ for (c in conds) {
 
     # Append the result of the new search space to all results
     all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
-    write.csv(current_search, sep = ",", file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",unique(current_search$condition),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
+    write.csv(current_search, sep = ",", file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
   }
   
   all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
@@ -489,7 +486,7 @@ for (c in conds) {
 }
 
 
-# ---- Plotting Semi-random Results ----
+# ---- Plotting 6 Week Semi-random Results ----
 # Looping through all outputs again to make combo plot for easier comparison of results
 combo_plot_list <- list()
 observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
@@ -497,7 +494,7 @@ observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
 for (c in 1:length(observed_rhos)) {
   observed_rho <- observed_rhos[c]
   for (s in 1:length(all_searches[[2]])) {
-    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(conds[c], "_random_knn_vs_rho_histogram_", s, "_1000"), observed_rho,
+    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(tolower(conds[c]), "_semi_random_knn_vs_rho_histogram_", s, "_1000"), observed_rho,
       plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
       hist_fill = "lightblue", line_color = "red", text_color = "red"
     )
@@ -516,7 +513,7 @@ for (c in 1:length(observed_rhos)) {
   ggsave(plot = combo_plot,
          device = "png",
          path = "Outputs/knn_analysis/plots/", 
-         filename = paste0(conds[c],"_random_searches_1000_combo.png"),
+         filename = paste0(tolower(conds[c]),"_semi_random_searches_1000_combo.png"),
          units = "in",
          dpi = 600,
          width = 8,
@@ -527,7 +524,7 @@ for (c in 1:length(observed_rhos)) {
   ggsave(plot = combo_plot,
          device = "svg",
          path = "Outputs/knn_analysis/plots/", 
-         filename = paste0(conds[c],"_random_searches_1000_combo.svg"),
+         filename = paste0(tolower(conds[c]),"_semi_random_searches_1000_combo.svg"),
          units = "in",
          dpi = 600,
          width = 8,
@@ -538,7 +535,7 @@ for (c in 1:length(observed_rhos)) {
 }
 
 
-# ---- Permutation Test with Max Randomness ----
+# ---- 6 Week Permutation Test with Max Randomness ----
 # All conditions 1000 permutations at max randomness
 conds <- c("NW", "NH", "SW", "SH")
 all_conds <- list()
@@ -568,17 +565,17 @@ for (c in conds) {
   all_conds[[paste0(c)]] <- current_cond_perm
   
   # Save the results
-  write.csv(current_cond_perm, file = paste0("Outputs/knn_analysis/data/random_analysis/", unique(current_cond_perm$condition), "_", "max_randomness_", unique(current_cond_perm$num_iterations), "_num_iterations.csv"))
+  write.csv(current_cond_perm, file = paste0("Outputs/knn_analysis/data/random_analysis/", tolower(unique(current_cond_perm$condition)), "_", "max_randomness_", unique(current_cond_perm$num_iterations), "_num_iterations.csv"))
 }
 
-# ---- Plotting  Max Random Results ----
+# ---- Plotting 6 Week Max Random Results ----
 # Looping through all outputs again to make combo plot for easier comparison of results
 combo_plot_list <- list()
 observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
 
 for (c in 1:length(observed_rhos)) {
   observed_rho <- observed_rhos[c]
-  combo_plot_list[[paste0(c)]] <- plot_permutation_test(all_conds[[c]], paste0(conds[c], "_max_random_knn_vs_rho_histogram_1000"), observed_rho,
+  combo_plot_list[[paste0(c)]] <- plot_permutation_test(all_conds[[c]], paste0(tolower(conds[c]), "_max_random_knn_vs_rho_histogram_1000"), observed_rho,
     plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
     hist_fill = "lightblue", line_color = "red", text_color = "red"
   )
@@ -621,3 +618,175 @@ ggsave(
 )
 
 
+
+# ---- 12 Week Permutation Test Across Search Space ----
+# All conditions 1000 permutations at 5-50 search space with steps of 5
+search_space <- seq(5, 50, 5)
+conds <- c("NW", "NH", "SW", "SH")
+all_current_cond_searches <- list()
+all_searches <- list()
+counter <- 1
+
+for (c in conds) {
+  current_cond <- twelve_wk_data %>%
+    filter(condition == c)
+  
+  current_cond <- current_cond %>% group_by(filename)
+  all_imgs <- current_cond %>% group_split(current_cond)
+  
+  all_current_cond_searches <- list()  # Create a new list for each condition
+  
+  for (s in search_space) {
+    current_search <- permutation_knn_analysis(all_imgs,
+                                               num_nearest = s,
+                                               custom_seed = 1689016866,
+                                               k = 5,
+                                               num_iterations = 10,
+                                               num_cores = 1,
+                                               random_num_neighbors = TRUE,
+                                               max_randomness = FALSE,
+                                               apply_intensity = TRUE,
+                                               p_only = TRUE,
+                                               calc_mean_intensity = TRUE
+    )
+    
+    # Append the result of the new search space to all results
+    all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
+    write.csv(current_search, sep = ",", file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations_12_wk.csv"))
+  }
+  
+  all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
+  counter <- counter + 1
+}
+
+
+# ---- Plotting 12 Week Semi-random Results ----
+# Looping through all outputs again to make combo plot for easier comparison of results
+combo_plot_list <- list()
+observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
+
+for (c in 1:length(observed_rhos)) {
+  observed_rho <- observed_rhos[c]
+  for (s in 1:length(all_searches[[2]])) {
+    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(tolower(conds[c]), "_semi_random_knn_vs_rho_histogram_", s, "_1000_12_wk"), observed_rho,
+                                                                  plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
+                                                                  hist_fill = "lightblue", line_color = "red", text_color = "red"
+    )
+  }
+  
+  # Making combo plot
+  combo_plot <- ggarrange(plotlist = combo_plot_list,
+                          ncol = 2,
+                          nrow = 5,
+                          labels = "AUTO",
+                          align = "hv", 
+                          font.label = list(size = 18, face = "bold"))
+  
+  
+  # Saving combo plot in PNG
+  ggsave(plot = combo_plot,
+         device = "png",
+         path = "Outputs/knn_analysis/plots/", 
+         filename = paste0(tolower(conds[c]),"_semi_random_searches_1000_combo_12_wk.png"),
+         units = "in",
+         dpi = 600,
+         width = 8,
+         height = 8)
+  
+  
+  # Saving combo plot in SVG
+  ggsave(plot = combo_plot,
+         device = "svg",
+         path = "Outputs/knn_analysis/plots/", 
+         filename = paste0(tolower(conds[c]),"_semi_random_searches_1000_combo_12_wk.svg"),
+         units = "in",
+         dpi = 600,
+         width = 8,
+         height = 8)
+  
+  # Reset the combo list
+  combo_plot_list <- list()
+}
+
+
+# ---- 12 Week Permutation Test with Max Randomness ----
+# All conditions 1000 permutations at max randomness
+conds <- c("NW", "NH", "SW", "SH")
+all_conds <- list()
+
+# Loop through each condition and subset to it before performing permutation analysis
+for (c in conds) {
+  current_cond <- twelve_wk_data %>%
+    filter(condition == c)
+  
+  current_cond <- current_cond %>% group_by(filename)
+  all_imgs <- current_cond %>% group_split(current_cond)
+  
+  all_current_cond_searches <- list() # Create a new list for each condition
+  
+  current_cond_perm <- permutation_knn_analysis(all_imgs,
+                                                custom_seed = 1689016866,
+                                                k = 5,
+                                                num_iterations = 1000,
+                                                num_cores = 1,
+                                                random_num_neighbors = FALSE,
+                                                max_randomness = TRUE,
+                                                apply_intensity = TRUE,
+                                                p_only = TRUE,
+                                                calc_mean_intensity = TRUE
+  )
+  
+  all_conds[[paste0(c)]] <- current_cond_perm
+  
+  # Save the results
+  write.csv(current_cond_perm, file = paste0("Outputs/knn_analysis/data/random_analysis/", tolower(unique(current_cond_perm$condition)), "_", "max_randomness_", unique(current_cond_perm$num_iterations), "_num_iterations_12_wk.csv"))
+}
+
+# ---- Plotting 12 Week Max Random Results ----
+# Looping through all outputs again to make combo plot for easier comparison of results
+combo_plot_list <- list()
+observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
+
+for (c in 1:length(observed_rhos)) {
+  observed_rho <- observed_rhos[c]
+  combo_plot_list[[paste0(c)]] <- plot_permutation_test(all_conds[[c]], paste0(tolower(conds[c]), "_max_random_knn_vs_rho_histogram_1000_12_wk"), observed_rho,
+                                                        plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
+                                                        hist_fill = "lightblue", line_color = "red", text_color = "red"
+  )
+}
+
+# Making combo plot
+combo_plot <- ggarrange(
+  plotlist = combo_plot_list,
+  ncol = 2,
+  nrow = 2,
+  labels = "AUTO",
+  align = "hv",
+  font.label = list(size = 18, face = "bold")
+)
+
+
+# Saving combo plot in PNG
+ggsave(
+  plot = combo_plot,
+  device = "png",
+  path = "Outputs/knn_analysis/plots/",
+  filename = paste0("12_wk_combo_max_random_searches_1000_combo.png"),
+  units = "in",
+  dpi = 600,
+  width = 8,
+  height = 8
+)
+
+
+# Saving combo plot in SVG
+ggsave(
+  plot = combo_plot,
+  device = "svg",
+  path = "Outputs/knn_analysis/plots/",
+  filename = paste0("12_wk_combo_max_random_searches_1000_combo.svg"),
+  units = "in",
+  dpi = 600,
+  width = 8,
+  height = 8
+)
