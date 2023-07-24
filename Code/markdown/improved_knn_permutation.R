@@ -1,6 +1,6 @@
 # Name: improved_knn_permutation.R
 # Purpose: Re-write of both test_3d_knn.R and parts of knn_analysis_2.Rmd. To make more readable, reproducible, and
-# modular code. To also speed up code
+# modular code.
 # Author: Andrew Willems <awillems@vols.utk.edu>
 
 
@@ -121,7 +121,8 @@ permutation_knn_analysis <- function(all_imgs,
                                      num_iterations = 1000,
                                      num_cores = NULL,
                                      random_num_neighbors = FALSE,
-                                     max_randomness = FALSE) {
+                                     max_randomness = FALSE,
+                                     include_image = FALSE) {
   
   # Create an empty vector to store the correlation values
   all_rhos_stored <- vector()
@@ -212,12 +213,10 @@ permutation_knn_analysis <- function(all_imgs,
           )
           # Then subset to the neighbors within num_nearest with order
           k_nearest_indices <- order(distances)[1:num_nearest]
-          # print(k_nearest_indices)
-          # Then sample from these num_nearest neighbors randomly
-          k_nearest_indices <- sample(k_nearest_indices, replace = TRUE)
-          # print(k_nearest_indices)
-          # Then pass the randomly selected indices from the num_nearest neighbors to the other points
+          # Then subset the other points to the nearest_indices
           k_nearest_points <- other_points[k_nearest_indices, ]
+          # Then randomly sample those k_nearest_points based on the value of k
+          k_nearest_points <- k_nearest_points %>% slice_sample(replace = TRUE, n = k)
         } else {
           # Perform regular KNN analysis with no randomness
           distances <- euclidean_distance_3d(
@@ -234,9 +233,6 @@ permutation_knn_analysis <- function(all_imgs,
           k_nearest_points <- other_points[k_nearest_indices, ]
           num_nearest <- "max_randomness"
         }
-        
-        
-        # print(distances)
         
         # Calculating other parts of the score beyond just KNN
         add_p_score <- sum((k_nearest_points$mecp2_p == "P")) / k
@@ -270,8 +266,9 @@ permutation_knn_analysis <- function(all_imgs,
       
       # Binding all observations of an image together
       df <- bind_rows(all_data)
-      # print(df)
       
+      # If include_image = TRUE than calculate rho for each image 1000 times. If FALSE simply calculate rho for each
+      # condition 1000 times.
       # Performing the correlation test between the mean and the positive (mecp2_p = P) neighborhood mean of
       # all rows in a particular image
       cor_res <- cor.test(
@@ -316,27 +313,42 @@ permutation_knn_analysis <- function(all_imgs,
 #'
 #' This function creates a histogram plot based on the provided data, showing the results of a permutation test.
 #'
-#' @param data The dataframe containing the data to be plotted.
-#' @param filename The filename for saving the plot (without extension).
-#' @param x_intercept The x-coordinate value for the vertical line to be added to the plot. Represents the observed Spearman correlation coefficient seen in the data.
-#' @param plot_size The desired size of the plot (in inches).
-#' @param base_plot_size The base plot size to be used for scaling text elements.
-#' @param dpi The DPI (dots per inch) for the plot.
-#' @param hist_color The color of the histogram bars.
-#' @param hist_fill The fill color of the histogram bars.
-#' @param num_bins The number of bins to use in the histogram.
-#' @param line_color The color of the vertical line.
-#' @param text_color The color of the annotation text.
+#' @param data A data frame containing the permutation test results.
+#' @param filename The base filename for saving the plot (without extension).
+#' @param x_intercept The x-coordinate of the vertical red line to indicate the observed value.
+#' @param plot_size The size of the plot (in inches). Default is 10.
+#' @param base_plot_size The base size of the plot for calculating text scaling. Default is 8.
+#' @param dpi The resolution for saving the plot (dots per inch). Default is 600.
+#' @param hist_color The color of the histogram border. Default is "steelblue".
+#' @param hist_fill The fill color of the histogram. Default is "steelblue".
+#' @param num_bins The number of bins in the histogram. Default is 30.
+#' @param line_color The color of the vertical red line. Default is "red".
+#' @param text_color The color of the p-value text. Default is "red".
+#' @param calculate_pvalue Logical indicating whether to calculate the p-value. Default is TRUE.
+#' @param plot_pvalue Logical indicating whether to plot the p-value on the histogram. Default is FALSE.
 #'
 #' @return The created ggplot object representing the histogram plot.
 #'
 #' @import ggplot2
 #' @import grid
 #' @import scales
+#' @import ggrepel
 #'
 #' @export
-plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, base_plot_size = 8, dpi = 600, hist_color = "steelblue",
-                                  hist_fill = "steelblue", num_bins = 30, line_color = "red", text_color = "red") {
+plot_permutation_test <- function(data,
+                                  filename,
+                                  x_intercept, 
+                                  plot_size = 10,
+                                  base_plot_size = 8,
+                                  dpi = 600,
+                                  hist_color = "steelblue",
+                                  hist_fill = "steelblue",
+                                  num_bins = 30, 
+                                  line_color = "red", 
+                                  text_color = "red", 
+                                  calculate_pvalue = TRUE,
+                                  p_value_test = "less",
+                                  plot_pvalue = FALSE) {
   # Required packages
   library(ggplot2)
   library(grid)
@@ -357,6 +369,21 @@ plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, b
   # Calculate the scaling factor for text elements based on plot size and base plot size
   text_scale <- plot_size / base_plot_size
   
+  # Calculate p-value if required
+  if (calculate_pvalue) {
+    # Get the observed value (the x_intercept)
+    observed_value <- x_intercept
+    
+    # Calculate the p-value
+    p_value_comp <- t.test(data$rho, mu = observed_value, alternative = p_value_test)
+    
+    # Print the observed value and p-value to the console
+    message(paste0("Observed Value: ", round(observed_value, digits = 4)))
+    print(p_value_comp)
+  }
+  
+  
+  
     # Build the plot
     p <- ggplot(data = data, aes(x = rho)) +
       geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
@@ -368,6 +395,7 @@ plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, b
         axis.ticks.length = unit(0.2, units = "cm") * text_scale,
         strip.text = element_text(size = 18 * text_scale, face = "bold"),
         plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 18 * text_scale, face = "bold", hjust = 0.5),
         axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
       ) +
       ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched")) +
@@ -375,10 +403,33 @@ plot_permutation_test <- function(data, filename, x_intercept, plot_size = 10, b
       ylab("Count") +
       scale_y_continuous(expand = c(0, 0)) +
       geom_vline(xintercept = x_intercept, color = line_color)
+    
+    
 
   # Calculate the width and height for the plot
   width <- plot_size * dpi
   height <- plot_size * dpi
+  
+  # If calculated p-value is less than 2.2e-16 than add subtitle mentioning raw p-value
+  if (p_value_comp$p.value < 2.2e-16) {
+    p <- p + labs(subtitle = "Raw p-value < 2.2e-16")
+  }
+  
+  
+  # Plot p-value if required
+  if (plot_pvalue) {
+    # Plot the histogram with p-value information
+    p <- p + annotate(
+      geom = "text",
+      x = x_intercept - (width * 0.0001),
+      y = height * 0.8,
+      label = bquote(italic("p") ~ "=" ~ .(round(p_value_comp$p.value, 4))),
+      color = text_color,
+      size = 10 * text_scale,
+      hjust = 0
+    )
+  }
+  
 
   # Convert width and height to inches
   width_inches <- width / dpi
@@ -467,7 +518,7 @@ for (c in conds) {
       num_nearest = s,
       custom_seed = 1689016866,
       k = 5,
-      num_iterations = 1000,
+      num_iterations = 10,
       num_cores = 1,
       random_num_neighbors = TRUE,
       max_randomness = FALSE,
@@ -478,7 +529,7 @@ for (c in conds) {
 
     # Append the result of the new search space to all results
     all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
-    write.csv(current_search, sep = ",", file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
+    write.csv(current_search, file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
   }
   
   all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
@@ -494,7 +545,7 @@ observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
 for (c in 1:length(observed_rhos)) {
   observed_rho <- observed_rhos[c]
   for (s in 1:length(all_searches[[2]])) {
-    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(tolower(conds[c]), "_semi_random_knn_vs_rho_histogram_", s, "_1000"), observed_rho,
+    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(tolower(conds[c]), "_semi_random_knn_vs_rho_histogram_", s, "_", tolower(unique(current_search$num_iterations)), "_permutations"), observed_rho,
       plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
       hist_fill = "lightblue", line_color = "red", text_color = "red"
     )
@@ -513,7 +564,7 @@ for (c in 1:length(observed_rhos)) {
   ggsave(plot = combo_plot,
          device = "png",
          path = "Outputs/knn_analysis/plots/", 
-         filename = paste0(tolower(conds[c]),"_semi_random_searches_1000_combo.png"),
+         filename = paste0(tolower(conds[c]),"_semi_random_searches_",tolower(unique(current_search$num_iterations)),"_combo.png"),
          units = "in",
          dpi = 600,
          width = 8,
@@ -524,7 +575,7 @@ for (c in 1:length(observed_rhos)) {
   ggsave(plot = combo_plot,
          device = "svg",
          path = "Outputs/knn_analysis/plots/", 
-         filename = paste0(tolower(conds[c]),"_semi_random_searches_1000_combo.svg"),
+         filename = paste0(tolower(conds[c]),"_semi_random_searches_",tolower(unique(current_search$num_iterations)),"_combo.svg"),
          units = "in",
          dpi = 600,
          width = 8,
@@ -558,8 +609,8 @@ for (c in conds) {
     random_num_neighbors = FALSE,
     max_randomness = TRUE,
     apply_intensity = TRUE,
-    p_only = TRUE,
-    calc_mean_intensity = TRUE
+    p_only = TRUE, 
+    calc_mean_intensity = TRUE,
   )
   
   all_conds[[paste0(c)]] <- current_cond_perm
@@ -569,15 +620,15 @@ for (c in conds) {
 }
 
 # ---- Plotting 6 Week Max Random Results ----
-# Looping through all outputs again to make combo plot for easier comparison of results
+# Making combo plot for easier comparison of results
 combo_plot_list <- list()
 observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
 
 for (c in 1:length(observed_rhos)) {
   observed_rho <- observed_rhos[c]
-  combo_plot_list[[paste0(c)]] <- plot_permutation_test(all_conds[[c]], paste0(tolower(conds[c]), "_max_random_knn_vs_rho_histogram_1000"), observed_rho,
+  combo_plot_list[[paste0(c)]] <- plot_permutation_test(all_conds[[c]], paste0(tolower(conds[c]), "_max_random_knn_vs_rho_histogram_", unique(current_search$num_iterations), "_iterations"), observed_rho,
     plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
-    hist_fill = "lightblue", line_color = "red", text_color = "red"
+    hist_fill = "lightblue", line_color = "red", text_color = "red", calculate_pvalue = TRUE, plot_pvalue = TRUE
   )
 }
 
@@ -588,7 +639,8 @@ combo_plot <- ggarrange(
   nrow = 2,
   labels = "AUTO",
   align = "hv",
-  font.label = list(size = 18, face = "bold")
+  font.label = list(size = 18, 
+                    face = "bold")
 )
 
 
@@ -597,7 +649,7 @@ ggsave(
   plot = combo_plot,
   device = "png",
   path = "Outputs/knn_analysis/plots/",
-  filename = paste0("combo_max_random_searches_1000_combo.png"),
+  filename = paste0("combo_max_random_searches_",unique(current_search$num_iterations),"_combo.png"),
   units = "in",
   dpi = 600,
   width = 8,
@@ -610,7 +662,7 @@ ggsave(
   plot = combo_plot,
   device = "svg",
   path = "Outputs/knn_analysis/plots/",
-  filename = paste0("combo_max_random_searches_1000_combo.svg"),
+  filename = paste0("combo_max_random_searches_",unique(current_search$num_iterations),"_combo.svg"),
   units = "in",
   dpi = 600,
   width = 8,
