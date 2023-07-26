@@ -241,9 +241,7 @@ permutation_knn_analysis <- function(all_imgs,
         
         # Calculate distances with intensity information
         if (apply_intensity) {
-          # print(k_nearest_indices)
           distances <- distances[k_nearest_indices]
-          # print(distances)
           distances_updated <- rescale(distances * k_nearest_points$mean, to = c(0, 1))
           distances_updated <- sort(distances_updated, decreasing = FALSE)
           
@@ -281,13 +279,13 @@ permutation_knn_analysis <- function(all_imgs,
       
       # Store the iteration results in the results list
       results[[paste0("Iteration ", result_index)]] <- data.frame(image = unique(df$filename),
-                                                              rho = rhos[i],
-                                                              p_value = p_values[i],
-                                                              condition = unique(df$condition),
-                                                              time = unique(df$time),
-                                                              k = k,
-                                                              k_search_space = num_nearest,
-                                                              num_iterations = num_iterations)
+                                                                  rho = rhos[i],
+                                                                  p_value = p_values[i],
+                                                                  condition = unique(df$condition),
+                                                                  time = unique(df$time),
+                                                                  k = k,
+                                                                  k_search_space = num_nearest,
+                                                                  num_iterations = num_iterations)
       
       # img_counter <- img_counter + 1
       result_index <- result_index + 1
@@ -306,7 +304,6 @@ permutation_knn_analysis <- function(all_imgs,
   # Return the result data frame
   return(result_df)
 }
-
 
 
 #' Plot histogram for permutation test results
@@ -348,7 +345,9 @@ plot_permutation_test <- function(data,
                                   text_color = "red", 
                                   calculate_pvalue = TRUE,
                                   p_value_test = "less",
-                                  plot_pvalue = FALSE) {
+                                  plot_pvalue = FALSE,
+                                  test_type = "One Sample t-test",
+                                  test_direction = "Lesser") {
   # Required packages
   library(ggplot2)
   library(grid)
@@ -402,7 +401,8 @@ plot_permutation_test <- function(data,
       xlab(expression(rho)) +
       ylab("Count") +
       scale_y_continuous(expand = c(0, 0)) +
-      geom_vline(xintercept = x_intercept, color = line_color)
+      geom_vline(xintercept = x_intercept, color = line_color) +
+      labs(subtitle = paste(test_type, " (", test_direction, ")", sep = ""))
     
     
 
@@ -412,7 +412,8 @@ plot_permutation_test <- function(data,
   
   # If calculated p-value is less than 2.2e-16 than add subtitle mentioning raw p-value
   if (p_value_comp$p.value < 2.2e-16) {
-    p <- p + labs(subtitle = "Raw p-value < 2.2e-16")
+    p <- p + labs(subtitle = paste(test_type, " (", test_direction, ")\nRaw p-value < 2.2e-16", sep = ""))
+    # p <- p + labs(subtitle = "Raw p-value < 2.2e-16")
   }
   
   
@@ -447,6 +448,191 @@ plot_permutation_test <- function(data,
   # Return the plot
   return(p)
 }
+
+
+permutation_condition_analysis <- function(current_cond = NULL,
+                                           num_nearest = 30,
+                                           custom_seed = 1689014354,
+                                           k = 5,
+                                           apply_intensity = TRUE,
+                                           p_only = TRUE,
+                                           calc_mean_intensity = TRUE,
+                                           num_iterations = 1000,
+                                           num_cores = NULL,
+                                           random_num_neighbors = FALSE,
+                                           max_randomness = FALSE) {
+  
+  
+  # Loading needed packages
+  library(parallel)
+  library(doParallel)
+  
+  # Create an empty vector to store the correlation values
+  all_rhos_stored <- vector()
+  
+  # Create an empty vector to store the p-values
+  all_p_values_stored <- vector()
+  all_data <- list()
+  # Set the random seed if provided
+  if (!is.null(custom_seed)) {
+    set.seed(custom_seed)
+    cat("Custom random seed:", custom_seed, "\n")
+  } else {
+    # Generate a random seed using the system time
+    random_seed <- as.integer(Sys.time())
+    set.seed(random_seed)
+    cat("Generated random seed:", random_seed, "\n")
+  }
+  
+  # Determine the number of CPU cores to use
+  if (is.null(num_cores)) {
+    num_cores <- parallel::detectCores() - 1
+    cat("Number of cores used:", num_cores, "\n")
+  } else {
+    num_cores <- num_cores
+    cat("Number of cores used:", num_cores, "\n")
+  }
+  
+  # Register parallel backend using doParallel
+  registerDoParallel(num_cores)
+  
+  # Create a progress bar
+  pb <- progress_bar$new(total = num_iterations, width = 60)
+  
+  # List to store results from the permutation
+  results <- vector("list", num_iterations)
+  
+  # Get unique conditions from the data
+  unique_conditions <- unique(current_cond$condition)
+  
+  # Initialize an empty list to store the results for each condition
+  all_results <- list()
+  
+  # Loop through each unique condition
+  for (cond in unique_conditions) {
+    cat("Analyzing condition:", cond, "\n")
+    df <- current_cond
+    all_p_scores <- c()
+    rhos <- c()
+    p_values <- c()
+    counter <- 1
+    # Repeat the permutation analysis for the current condition
+    for (iteration in 1:num_iterations) {
+      # Create an empty vector to store the iteration results
+      iteration_rhos <- vector()
+      iteration_p_values <- vector()
+      n <- nrow(df)
+      
+        
+        # For each row within a condition
+        for (r in seq_len(n)) {
+          observation <- df[r, ]
+          other_points <- df[-r, ]
+          other_points$original_index <- seq_len(nrow(other_points))
+          
+          if (random_num_neighbors) {
+            # First calculate distances
+            distances <- euclidean_distance_3d(
+              observation$x, observation$y, observation$z,
+              other_points$x, other_points$y, other_points$z
+            )
+            # Then subset to the neighbors within num_nearest with order
+            k_nearest_indices <- order(distances)[1:num_nearest]
+            # Then subset the other points to the nearest_indices
+            k_nearest_points <- other_points[k_nearest_indices, ]
+            # Then randomly sample those k_nearest_points based on the value of k
+            # k_nearest_points <- k_nearest_points %>% slice_sample(replace = TRUE, n = k)
+            sampled_indices <- sample(k_nearest_indices, size = k, replace = TRUE)
+            k_nearest_points <- other_points[sampled_indices, ]
+          } else {
+            # Perform regular KNN analysis with no randomness
+            distances <- euclidean_distance_3d(
+              observation$x, observation$y, observation$z,
+              other_points$x, other_points$y, other_points$z
+            )
+            k_nearest_indices <- order(distances)[1:k]
+            k_nearest_points <- other_points[k_nearest_indices, ]
+          }
+          
+          # For max randomness
+          if (max_randomness){
+            k_nearest_indices <- sample(nrow(other_points), k, replace = TRUE)
+            k_nearest_points <- other_points[k_nearest_indices, ]
+            num_nearest <- "max_randomness"
+          }
+          
+          # Calculating other parts of the score beyond just KNN
+          add_p_score <- sum((k_nearest_points$mecp2_p == "P")) / k
+          observation$knn_label <- add_p_score
+          all_p_scores[[counter]] <- add_p_score
+          
+          # Calculate distances with intensity information
+          if (apply_intensity) {
+            distances <- distances[k_nearest_points$original_index]
+            distances_updated <- rescale(distances * k_nearest_points$mean, to = c(0, 1))
+            distances_updated <- sort(distances_updated, decreasing = FALSE)
+            
+            # Calculate updated distances with intensity information for just P neighbors
+            if (p_only) {
+              k_nearest_points <- k_nearest_points[k_nearest_points$mecp2_p == "P", ]
+              if (nrow(k_nearest_points) == 0) {
+                writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
+                next
+              }
+            }
+            if (calc_mean_intensity) {
+              mean_of_neighbors <- mean(k_nearest_points$mean)
+              observation$positive_neighborhood_mean <- mean_of_neighbors
+              all_data <- c(all_data, list(observation))
+              counter <- counter + 1
+            }
+          }
+        }
+        
+        # Binding all observations of a condition together
+        cor_df <- bind_rows(all_data)
+        
+        # Performing the correlation test between the mean and the positive (mecp2_p = P) neighborhood mean of
+        # all rows in a particular condition
+        cor_res <- cor.test(
+          x = cor_df$mean,
+          y = cor_df$positive_neighborhood_mean,
+          method = "spearman"
+        )
+        rhos[cond] <- as.numeric(as.vector(unlist(cor_res$estimate)))
+        p_values[cond] <- cor_res$p.value
+      
+      # Store the iteration results in a data frame
+      results[[iteration]] <- data.frame(condition = cond,
+                                         rho = rhos[cond],
+                                         p_value = p_values[cond],
+                                         k = k,
+                                         k_search_space = num_nearest,
+                                         num_iterations = num_iterations)
+      
+      # Update the progress bar for each iteration
+      pb$tick()
+    }
+    
+    # Append the results of all iterations for the current condition to the all_results list
+    all_results[[cond]] <- do.call(rbind, results)
+  }
+  
+  # Stop the parallel backend
+  stopImplicitCluster()
+  
+  # Combine the results for all conditions into a single data frame
+  result_df <- do.call(rbind, all_results)
+  # Make the row names numeric. Represents the number of iterations
+  rownames(result_df) <- 1:nrow(result_df)
+  
+  # Return the result data frame
+  return(result_df)
+}
+
+
+
+
 
 
 
@@ -509,7 +695,7 @@ for (c in conds) {
     filter(condition == c)
 
   current_cond <- current_cond %>% group_by(filename)
-  all_imgs <- current_cond %>% group_split(current_cond)
+  # all_imgs <- current_cond %>% group_split(current_cond)
 
   all_current_cond_searches <- list()  # Create a new list for each condition
   
@@ -529,12 +715,53 @@ for (c in conds) {
 
     # Append the result of the new search space to all results
     all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
-    write.csv(current_search, file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
+    # write.csv(current_search, file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
   }
   
   all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
   counter <- counter + 1
 }
+
+
+
+# Doing it only for conditions 
+search_space <- seq(5, 50, 5)
+conds <- c("NW", "NH", "SW", "SH")
+all_current_cond_searches <- list()
+all_searches <- list()
+counter <- 1
+
+for (c in conds) {
+  current_cond <- six_wk_data %>%
+    filter(condition == c)
+  
+  current_cond <- current_cond %>% group_by(filename)
+  
+  all_current_cond_searches <- list()  # Create a new list for each condition
+  
+  for (s in search_space) {
+    current_search <- permutation_condition_analysis(current_cond,
+                                               num_nearest = s,
+                                               custom_seed = 1689016866,
+                                               k = 5,
+                                               num_iterations = 10,
+                                               num_cores = 1,
+                                               random_num_neighbors = TRUE,
+                                               max_randomness = FALSE,
+                                               apply_intensity = TRUE,
+                                               p_only = TRUE,
+                                               calc_mean_intensity = TRUE
+    )
+    
+    # Append the result of the new search space to all results
+    all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
+    write.csv(current_search, file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations_new_code.csv"))
+  }
+  
+  all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
+  counter <- counter + 1
+}
+
 
 
 # ---- Plotting 6 Week Semi-random Results ----
