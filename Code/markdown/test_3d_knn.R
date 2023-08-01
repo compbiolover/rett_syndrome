@@ -1,6 +1,26 @@
+# ----Loading packages----
+pacman::p_load(
+  car, # Tools for performing specific statistical tests
+  caret, # Tools for training and evaluating predictive models
+  class, # Functions for nearest neighbor classification
+  deldir, # Delaunay triangulation and Dirichlet (Voronoi) tesselation
+  effectsize, # Functions for calculating standardized effect sizes
+  foreach, # Functions for parallel computing
+  ggforce, # Additional geometries, stats, scales and themes for ggplot2
+  ggpubr, # Functions for combining multiple ggplots into a single plot
+  ggsignif, # Geometries for adding significance bars to ggplot2 plots
+  parallel, # More functions for parallel computing
+  progress, # Functions for progress bar
+  rstatix, # Functions for descriptive statistics and statistical tests
+  readxl, # Functions for reading Excel files
+  reticulate, # Interface to Python for calling Python code from R
+  scales, # Functions for scaling and formatting plot axes
+  tidyverse # Collection of packages for data manipulation and visualization
+)
+
 # ----Loading 6 wk data----
-threed_data <- read.csv("Data/Old data/Jacob/3D_MECP2_6WO_combined_dataset.csv")
-threed_data <- threed_data %>%
+six_wk_data <- read.csv("Data/Old data/Jacob/3D_MECP2_6WO_combined_dataset.csv")
+six_wk_data <- six_wk_data %>%
   select(Filename, Mean, CX..pix., CY..pix., CZ..pix., MECP2) %>%
   rename(mecp2_p = MECP2) %>%
   rename_all(tolower) %>%
@@ -14,323 +34,198 @@ threed_data <- threed_data %>%
   filter(mecp2_p == "P") %>%
   mutate(id = 1:nrow(.))
 
-threed_data <- threed_data %>% group_by(filename)
-all_imgs <- threed_data %>% group_split(threed_data)
+six_wk_data <- six_wk_data %>% group_by(filename)
+all_imgs <- six_wk_data %>% group_split(six_wk_data)
 
 
-# ----Loading euclidian distance function----
-# Function to calculate Euclidean distance between two 3D points
+# ----Loading euclidean distance function----
+# ----Loading plotting function made in improved_knn_permutation.R----
+#' Plot histogram for permutation test results
+#'
+#' This function creates a histogram plot based on the provided data, showing the results of a permutation test.
+#'
+#' @param data A data frame containing the permutation test results.
+#' @param filename The base filename for saving the plot (without extension).
+#' @param x_intercept The x-coordinate of the vertical red line to indicate the observed value.
+#' @param plot_size The size of the plot (in inches). Default is 10.
+#' @param base_plot_size The base size of the plot for calculating text scaling. Default is 8.
+#' @param dpi The resolution for saving the plot (dots per inch). Default is 600.
+#' @param hist_color The color of the histogram border. Default is "steelblue".
+#' @param hist_fill The fill color of the histogram. Default is "steelblue".
+#' @param num_bins The number of bins in the histogram. Default is 30.
+#' @param line_color The color of the vertical red line. Default is "red".
+#' @param text_color The color of the p-value text. Default is "red".
+#' @param calculate_pvalue Logical indicating whether to calculate the p-value. Default is TRUE.
+#' @param plot_pvalue Logical indicating whether to plot the p-value on the histogram. Default is FALSE.
+#'
+#' @return The created ggplot object representing the histogram plot.
+#'
+#' @import ggplot2
+#' @import grid
+#' @import scales
+#' @import ggrepel
+#'
+#' @export
+plot_permutation_test <- function(data,
+                                  filename,
+                                  x_intercept,
+                                  plot_size = 10,
+                                  base_plot_size = 8,
+                                  dpi = 600,
+                                  hist_color = "steelblue",
+                                  hist_fill = "steelblue",
+                                  num_bins = 30,
+                                  line_color = "red",
+                                  text_color = "red",
+                                  calculate_pvalue = TRUE,
+                                  p_value_test = "less",
+                                  test_type = "One Sample t-test",
+                                  test_direction = "Lesser") {
+  # Required packages
+  library(ggplot2)
+  library(grid)
+  library(scales)
+
+  # Extracting the relevant pieces of data that will be used in building the plot
+  time_point <- unique(data$time_point)
+  k_value <- unique(data$k_value)
+  num_permutations <- unique(data$num_iterations)
+  num_ks <- unique(data$search_space)
+
+  # Modifying the title of plots that are generated with max randomness
+  if (num_ks == "max_randomness") {
+    num_ks <- "All"
+  }
+
+
+  # Calculate the scaling factor for text elements based on plot size and base plot size
+  text_scale <- plot_size / base_plot_size
+
+  # Calculate p-value if required
+  if (calculate_pvalue) {
+    # Get the observed value (the x_intercept)
+    observed_value <- x_intercept
+
+    # Calculate the p-value
+    p_value_comp <- t.test(data$rho, mu = observed_value, alternative = p_value_test)
+
+    # Print the observed value and p-value to the console
+    message(paste0("Observed Value: ", round(observed_value, digits = 4)))
+    print(p_value_comp)
+
+    # Build the plot with p-value if calculation is requested
+    p <- ggplot(data = data, aes(x = rho)) +
+      geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
+      theme(
+        panel.background = element_blank(),
+        axis.title = element_text(size = 18 * text_scale, face = "bold"),
+        axis.text = element_text(size = 16 * text_scale),
+        axis.ticks = element_line(linewidth = 1.25 * text_scale),
+        axis.ticks.length = unit(0.2, units = "cm") * text_scale,
+        strip.text = element_text(size = 18 * text_scale, face = "bold"),
+        plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 18 * text_scale, face = "bold", hjust = 0.5),
+        axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
+      ) +
+      ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched")) +
+      xlab(expression(rho)) +
+      ylab("Count") +
+      scale_y_continuous(expand = c(0, 0)) +
+      geom_vline(xintercept = x_intercept, color = line_color) +
+      labs(subtitle = paste(test_type, " (", test_direction, ")\np-value: ", round(p_value_comp$p.value, digits = 4), sep = ""))
+  } else {
+    # Without p-value if not requested
+    p <- ggplot(data = data, aes(x = rho)) +
+      geom_histogram(color = hist_color, fill = hist_fill, bins = num_bins) +
+      theme(
+        panel.background = element_blank(),
+        axis.title = element_text(size = 18 * text_scale, face = "bold"),
+        axis.text = element_text(size = 16 * text_scale),
+        axis.ticks = element_line(linewidth = 1.25 * text_scale),
+        axis.ticks.length = unit(0.2, units = "cm") * text_scale,
+        strip.text = element_text(size = 18 * text_scale, face = "bold"),
+        plot.title = element_text(size = 20 * text_scale, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 18 * text_scale, face = "bold", hjust = 0.5),
+        axis.line = element_line(colour = "black", linewidth = 1.25 * text_scale)
+      ) +
+      ggtitle(paste0("K = ", k_value, " | ", unique(data$condition), " | ", num_permutations, " Permutations | \n", time_point, " WK | ", num_ks, " KNNs Searched")) +
+      xlab(expression(rho)) +
+      ylab("Count") +
+      scale_y_continuous(expand = c(0, 0)) +
+      geom_vline(xintercept = x_intercept, color = line_color) +
+      labs(subtitle = paste("No T-Test Performed", sep = ""))
+  }
+
+
+  # Calculate the width and height for the plot
+  width <- plot_size * dpi
+  height <- plot_size * dpi
+
+  # If calculated p-value is less than 2.2e-16 and we are calculating the p-value than add subtitle mentioning raw p-value
+  if (calculate_pvalue) {
+    if (p_value_comp$p.value < 2.2e-16) {
+      p <- p + labs(subtitle = paste(test_type, " (", test_direction, ")\np-value: ", round(p_value_comp$p.value, digits = 4), "\nRaw p-value < 2.2e-16", sep = ""))
+    }
+  }
+
+  # Convert width and height to inches
+  width_inches <- width / dpi
+  height_inches <- height / dpi
+
+  # Print width and height to the console
+  message(paste0("Saving plot ", filename, " with width equal to ", width_inches, " inches and height equal to ", height_inches, " inches"))
+
+  # Save as SVG
+  ggsave(plot = p, filename = paste0(filename, ".svg"), device = "svg", width = width, height = height, units = "px", dpi = dpi, path = "Outputs/knn_analysis/plots/")
+
+  # Save as PNG
+  ggsave(plot = p, filename = paste0(filename, ".png"), device = "png", width = width, height = height, units = "px", dpi = dpi, path = "Outputs/knn_analysis/plots/")
+
+  # Return the plot
+  return(p)
+}
+# ----Function to calculate Euclidean distance between two 3D points----
 euclidean_distance_3d <- function(x1, y1, z1, x2, y2, z2) {
   sqrt((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)
 }
 
-# ----KNN analysis for 6 WO data----
-all_data <- list()
-all_p_scores <- list()
-counter <- 1
-apply_intensity <- TRUE
-p_only <- TRUE
-calc_mean_intensity <- TRUE
-neighbor_means <- c()
-
-
-k_neighbors <- 5
-for (i in 1:length(all_imgs)) {
-  # Going through each image
-  df <- all_imgs[[i]]
-  df$knn_5_label <- rep(0, nrow(df))
-  # For every row / observation within an image
-  for (r in 1:nrow(df)) {
-    observation <- df[r, ]
-    other_points <- df[-r, ]
-    distances <- euclidean_distance_3d(
-      observation$x, observation$y, observation$z,
-      other_points$x, other_points$y, other_points$z
-    )
-
-
-    k_nearest_indices <- order(distances)[1:k_neighbors]
-    k_nearest_points <- other_points[k_nearest_indices, ]
-
-    intensity_info <- other_points[k_nearest_indices, ]
-    add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
-    observation$knn_5_label <- add_p_score
-    all_p_scores[[counter]] <- add_p_score
-
-    # Calculate distances with intensity information
-    if (apply_intensity) {
-      distances <- distances[k_nearest_indices]
-      distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
-      distances_updated <- sort(distances_updated, decreasing = FALSE)
-
-      # Calculate updated distances with intensity information for just P neighbors
-      if (p_only) {
-        intensity_info <- filter(intensity_info, mecp2_p == "P")
-        if (nrow(intensity_info) == 0) {
-          writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-        }
-      }
-      if (calc_mean_intensity) {
-        # intensity_info$positive_neighborhood_mean <- rep(0, nrow(intensity_info))
-        df$positive_neighborhood_mean <- rep(0, nrow(df))
-        mean_of_neighbors <- mean(intensity_info$mean)
-        neighbor_means <- c(neighbor_means, mean_of_neighbors)
-        observation$positive_neighborhood_mean <- mean_of_neighbors
-        all_data[[counter]] <- observation
-        counter <- counter + 1
-      }
-    }
-  }
-}
-
-test_df <- bind_rows(all_data)
-
-# ----Randomly sampling within 5 neighbors----
-all_data <- list()
-all_p_scores <- list()
-apply_intensity <- TRUE
-p_only <- TRUE
-calc_mean_intensity <- TRUE
-neighbor_means <- c()
-
-k_neighbors <- 5
-
-# Setting up the progress bar
-total_iterations <- 25
-correlation_values <- numeric(25)  # List to store correlation values
-pb <- txtProgressBar(min = 0, max = total_iterations, style = 3)
-
-# Begin 1000 iterations
-for (iteration in 1:total_iterations) {
-  
-  iteration_data <- list() # Data for this iteration
-  counter <- 1
-  
-  for (i in 1:length(all_imgs)) {
-    # Going through each image
-    df <- all_imgs[[i]]
-    df$knn_5_label <- rep(0, nrow(df))
-    
-    # For every row / observation within an image
-    for (r in 1:nrow(df)) {
-      observation <- df[r, ]
-      other_points <- df[-r, ]
-      
-      distances <- euclidean_distance_3d(
-        observation$x, observation$y, observation$z,
-        other_points$x, other_points$y, other_points$z
-      )
-      
-      k_nearest_indices <- order(distances)[1:k_neighbors]
-      k_nearest_points <- other_points[k_nearest_indices, ]
-      
-      # Randomly Sample from a Set of True Neighbors and select k_neighbor points
-      if (length(k_nearest_points) > 0) {
-        random_neighbor <- k_nearest_points[sample(1:nrow(k_nearest_points), k_neighbors), ]
-      }
-      
-      intensity_info <- other_points[k_nearest_indices, ]
-      add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
-      observation$knn_5_label <- add_p_score
-      all_p_scores[[counter]] <- add_p_score
-      
-      # Calculate distances with intensity information
-      if (apply_intensity) {
-        distances <- distances[k_nearest_indices]
-        distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
-        distances_updated <- sort(distances_updated, decreasing = FALSE)
-        
-        # Calculate updated distances with intensity information for just P neighbors
-        if (p_only) {
-          intensity_info <- filter(intensity_info, mecp2_p == "P")
-          if (nrow(intensity_info) == 0) {
-            writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-          }
-        }
-        if (calc_mean_intensity) {
-          df$positive_neighborhood_mean <- rep(0, nrow(df))
-          mean_of_neighbors <- mean(intensity_info$mean)
-          neighbor_means <- c(neighbor_means, mean_of_neighbors)
-          observation$positive_neighborhood_mean <- mean_of_neighbors
-          iteration_data[[counter]] <- observation
-          counter <- counter + 1
-        }
-      }
-    }
-  }
-  
-  # Append iteration data to all_data
-  all_data[[paste("Iteration", iteration)]] <- iteration_data
-  
-  
-  # Binding rows and calculating correlation
-  nw_data <- filter(combined_data, condition == "NW")
-  correlation_test <- cor.test(nw_data$mean, nw_data$positive_neighborhood_mean, method = "spearman", use = "complete.obs")
-  correlation_values[iteration] <- correlation_test$estimate
-  
-  # Update the progress bar
-  setTxtProgressBar(pb, iteration)
-}
-
-# Close the progress bar
-close(pb)
-
-all_data <- bind_rows(all_data)
-
-nw_data <- filter(all_data, condition == "NW")
-
-cor.test(x = nw_data$mean, nw_data$positive_neighborhood_mean, method = "spearman")
-
-
-
-# ----Modified loop to do correlation analysis for each condition----
-
-
-# Parameters
-k_neighbors <- 5
-num_nearest <- 10  # This should be >= k_neighbors
-
-total_iterations <- 100
-all_correlation_values <- list()  # List to store correlation values by condition
-
-pb <- txtProgressBar(min = 0, max = total_iterations, style = 3)
-
-# Begin iterations
-for (iteration in 1:total_iterations) {
-  
-  iteration_data <- list()  # Data for this iteration
-  counter <- 1
-  
-  for (i in 1:length(all_imgs)) {
-    # Going through each image
-    df <- all_imgs[[i]]
-    df$knn_5_label <- rep(0, nrow(df))
-    
-    # For every row / observation within an image
-    for (r in 1:nrow(df)) {
-      observation <- df[r, ]
-      other_points <- df[-r, ]
-      
-      distances <- euclidean_distance_3d(
-        observation$x, observation$y, observation$z,
-        other_points$x, other_points$y, other_points$z
-      )
-      
-      num_nearest_indices <- order(distances)[1:num_nearest]
-      num_nearest_points <- other_points[num_nearest_indices, ]
-      
-      # Randomly Sample within num_nearest and select k_neighbor points
-      if (length(num_nearest_points) >= k_neighbors) {
-        sampled_indices <- sample(1:length(num_nearest_points), k_neighbors)
-        k_nearest_points <- num_nearest_points[sampled_indices, ]
-      } else {
-        k_nearest_points <- num_nearest_points
-      }
-      
-      intensity_info <- k_nearest_points
-      add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
-      observation$knn_5_label <- add_p_score
-      all_p_scores[[counter]] <- add_p_score
-      
-      # Calculate distances with intensity information
-      if (apply_intensity) {
-        distances <- distances[sampled_indices]
-        distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
-        distances_updated <- sort(distances_updated, decreasing = FALSE)
-        
-        # Calculate updated distances with intensity information for just P neighbors
-        if (p_only) {
-          intensity_info <- filter(intensity_info, mecp2_p == "P")
-          if (nrow(intensity_info) == 0) {
-            writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-          }
-        }
-        
-        if (calc_mean_intensity) {
-          df$positive_neighborhood_mean <- rep(0, nrow(df))
-          mean_of_neighbors <- mean(intensity_info$mean)
-          neighbor_means <- c(neighbor_means, mean_of_neighbors)
-          observation$positive_neighborhood_mean <- mean_of_neighbors
-          iteration_data[[counter]] <- observation
-          counter <- counter + 1
-        }
-      }
-    }
-  }
-  
-  # Append iteration data to all_data
-  all_data[[paste("Iteration", iteration)]] <- iteration_data
-  
-  # Binding rows 
-  combined_data <- bind_rows(iteration_data)
-  
-  # Initializing a list to store the correlations for each condition for this iteration
-  iteration_correlations <- list()
-  
-  # Looping through each unique condition and calculating correlation
-  for(condition_name in unique(combined_data$condition)) {
-    condition_data <- filter(combined_data, condition == condition_name)
-    correlation_test <- cor.test(condition_data$mean, condition_data$positive_neighborhood_mean, method = "spearman")
-    iteration_correlations[[condition_name]] <- correlation_test$estimate
-  }
-  
-  all_correlation_values[[paste("Iteration", iteration)]] <- iteration_correlations
-  
-  # Update the progress bar
-  setTxtProgressBar(pb, iteration)
-}
-
-# Close the progress bar
-close(pb)
-
-
-
 # ----Finished semi-random code----
-
-library(dplyr)
-
-# Define the Euclidean distance function
-euclidean_distance_3d <- function(x1, y1, z1, x2, y2, z2) {
-  return(sqrt((x1 - x2)^2 + (y1 - y2)^2 + (z1 - z2)^2))
-}
-
 # Initialize
 total_iterations <- 25
 num_nearest <- 15
 k_neighbors <- 5
-correlation_values <- list()  # To store correlation results per condition per iteration
+correlation_values <- list() # To store correlation results per condition per iteration
 conditions <- unique(six_wk_data$condition)
 pb <- txtProgressBar(min = 0, max = total_iterations, style = 3)
 
 # Begin iterations
 for (iteration in 1:total_iterations) {
-  
-  iteration_data <- list()  # Data for this iteration
+  iteration_data <- list() # Data for this iteration
   counter <- 1
-  
+
   for (i in 1:length(all_imgs)) {
     # Going through each image
     df <- all_imgs[[i]]
     df$knn_5_label <- rep(0, nrow(df))
-    
+
     # For every row / observation within an image
     for (r in 1:nrow(df)) {
       observation <- df[r, ]
       other_points <- df[-r, ]
-      
+
       distances <- euclidean_distance_3d(
         observation$x, observation$y, observation$z,
         other_points$x, other_points$y, other_points$z
       )
-      
+
       # Ensure there are enough points to select num_nearest
       if (length(distances) >= num_nearest) {
         num_nearest_indices <- order(distances)[1:num_nearest]
         num_nearest_points <- other_points[num_nearest_indices, ]
       } else {
-        next  # Skip this observation if there aren't enough neighbors
+        next # Skip this observation if there aren't enough neighbors
       }
-      
+
       # If num_nearest and k_neighbors are the same, no need for further sampling
       if (num_nearest == k_neighbors) {
         k_nearest_points <- num_nearest_points
@@ -338,23 +233,23 @@ for (iteration in 1:total_iterations) {
         sampled_indices <- sample(1:length(num_nearest_points), k_neighbors)
         k_nearest_points <- num_nearest_points[sampled_indices, ]
       }
-      
+
       intensity_info <- k_nearest_points
       add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
       observation$knn_5_label <- add_p_score
-      
+
       if (apply_intensity) {
         distances <- distances[num_nearest_indices]
         distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
         distances_updated <- sort(distances_updated, decreasing = FALSE)
-        
+
         if (p_only) {
           intensity_info <- filter(intensity_info, mecp2_p == "P")
           if (nrow(intensity_info) == 0) {
             writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
           }
         }
-        
+
         if (calc_mean_intensity) {
           df$positive_neighborhood_mean <- rep(0, nrow(df))
           mean_of_neighbors <- mean(intensity_info$mean)
@@ -366,17 +261,17 @@ for (iteration in 1:total_iterations) {
       }
     }
   }
-  
+
   # Combine data for this iteration
   combined_data <- bind_rows(iteration_data)
-  
+
   # Calculating correlation for each condition
   for (cond in conditions) {
     specific_data <- filter(combined_data, condition == cond)
     correlation_test <- cor.test(specific_data$mean, specific_data$positive_neighborhood_mean, method = "spearman", use = "complete.obs")
     correlation_values[[paste(cond, "Iteration", iteration)]] <- correlation_test$estimate
   }
-  
+
   # Update the progress bar
   setTxtProgressBar(pb, iteration)
 }
@@ -385,52 +280,138 @@ for (iteration in 1:total_iterations) {
 close(pb)
 
 
-# ----Plotting semi-random 25 rep results ----
-# Filtering to just conditions to take a look at histograms
-# Extracting all rhos for each iteration and condition
-all_rhos <- lapply(correlation_values, function(iteration_result) {
-  iteration_result[["rho"]]
-})
+
+
+# ----Semi-random parallel code----
+# Load required library for parallel processing
+library(parallel)
+library(doParallel)
+
+# Function to process one iteration
+process_iteration <- function(iteration, max_iterations = 1000, time_point_to_use = 6, all_imgs, num_nearest, k_neighbors = 5, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE, conditions = c("NW", "SW", "NH", "SH")) {
+  correlation_values <- list()
+  counter <- 1
+  iteration_data <- list()
+
+  for (i in 1:length(all_imgs)) {
+    df <- all_imgs[[i]]
+    df$knn_5_label <- rep(0, nrow(df))
+
+    for (r in 1:nrow(df)) {
+      observation <- df[r, ]
+      other_points <- df[-r, ]
+
+      distances <- euclidean_distance_3d(
+        observation$x, observation$y, observation$z,
+        other_points$x, other_points$y, other_points$z
+      )
+
+      if (length(distances) >= num_nearest) {
+        num_nearest_indices <- order(distances)[1:num_nearest]
+        num_nearest_points <- other_points[num_nearest_indices, ]
+      } else {
+        next
+      }
+
+      if (num_nearest == k_neighbors) {
+        k_nearest_points <- num_nearest_points
+      } else {
+        sampled_indices <- sample(1:length(num_nearest_points), k_neighbors)
+        k_nearest_points <- num_nearest_points[sampled_indices, ]
+      }
+
+      intensity_info <- k_nearest_points
+      add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
+      observation$knn_5_label <- add_p_score
+      neighbor_means <- c()
+
+      if (apply_intensity) {
+        distances <- distances[num_nearest_indices]
+        distances_updated <- scales::rescale(distances * intensity_info$mean, to = c(0, 1))
+        distances_updated <- sort(distances_updated, decreasing = FALSE)
+
+        if (p_only) {
+          intensity_info <- dplyr::filter(intensity_info, mecp2_p == "P")
+          if (nrow(intensity_info) == 0) {
+            writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
+          }
+        }
+
+        if (calc_mean_intensity) {
+          df$positive_neighborhood_mean <- rep(0, nrow(df))
+          mean_of_neighbors <- mean(intensity_info$mean)
+          neighbor_means <- c(neighbor_means, mean_of_neighbors)
+          observation$positive_neighborhood_mean <- mean_of_neighbors
+          iteration_data[[counter]] <- observation
+          counter <- counter + 1
+        }
+      }
+    }
+  }
+
+  combined_data <- dplyr::bind_rows(iteration_data)
+
+  # Set up default values
+  for (cond in conditions) {
+    correlation_values[[cond]] <- NA
+  }
+
+  conditions <- unique(combined_data$condition)
+
+  for (cond in conditions) {
+    specific_data <- dplyr::filter(combined_data, .data$condition == cond)
+    valid_observations_mean <- sum(!is.na(specific_data$mean) & is.finite(specific_data$mean))
+    valid_observations_positive <- sum(!is.na(specific_data$positive_neighborhood_mean) & is.finite(specific_data$positive_neighborhood_mean))
+
+
+    if (valid_observations_mean > 1 && valid_observations_positive > 1) {
+      correlation_test <- cor.test(specific_data$mean, specific_data$positive_neighborhood_mean, method = "spearman", use = "complete.obs")
+      combined_data$search_space <- rep(num_nearest, nrow(combined_data))
+      combined_data$k_value <- rep(k_neighbors, nrow(combined_data))
+      combined_data$time_point <- rep(6, nrow(combined_data))
+      combined_data$num_iterations <- rep(max_iterations, nrow(combined_data))
+      current_df <- data.frame(
+        search_space = rep(num_nearest, nrow(specific_data)),
+        k_value = rep(k_neighbors, nrow(specific_data)),
+        time_point = rep(time_point_to_use, nrow(specific_data)),
+        num_iterations = rep(max_iterations, nrow(specific_data)),
+        rho = rep(correlation_test$estimate, nrow(specific_data))
+      )
+      # correlation_values[[cond]] <- correlation_test$estimate
+      correlation_values[[cond]] <- current_df
+    }
+  }
+
+  # return(list(paste("Iteration", iteration) = correlation_values))
+  return(correlation_values)
+}
+
+
+# Set the number of CPU cores to use (you can adjust this based on your system)
+num_cores <- 11
+
+# Initialize parallel backend
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Parallelized loop using foreach for an individual search space value
+total_iterations <- 1000
+results <- foreach(iteration = 1:total_iterations, .combine = c) %dopar% {
+  process_iteration(iteration, max_iterations = total_iterations, all_imgs = all_imgs, num_nearest = , k_neighbors = 5, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE, conditions = TRUE)
+}
+
+
+# Close the parallel backend
+stopCluster(cl)
 
 
 
-# Separate the condition and iteration from the names
-name_parts <- strsplit(names(correlation_values), " ")
-conditions <- sapply(name_parts, `[`, 1)
-
-# Group items by condition and extract rho values
-grouped_rhos <- lapply(unique(conditions), function(cond) {
-  indexes <- which(conditions == cond)
-  sapply(indexes, function(i) correlation_values[[i]]["rho"])
-})
-names(grouped_rhos) <- c("SH", "SW", "NH", "NW")
-
-# Convert the list to a matrix
-rho_matrix <- do.call(cbind, grouped_rhos)
-
-# SH
-hist(rho_matrix[,1], col = "lightblue", main = paste0("6 WK SH ", nrow(rho_matrix), " iterations"), xlab = "Rho", xlim = c(0.38, 0.60))
-abline(v = 0.58, col = "red", lwd=3, lty=1)
-
-
-# SW
-hist(rho_matrix[,2], col = "lightblue", main = paste0("6 WK SW ", nrow(rho_matrix), " iterations"), xlab = "Rho", xlim = c(0.33,0.53))
-abline(v = 0.52, col = "red", lwd=3, lty=1)
-
-
-# NH
-hist(rho_matrix[,3], col = "lightblue", main = paste0("6 WK NH ", nrow(rho_matrix), " iterations"), xlab = "Rho")
-abline(v = 0.44, col = "red", lwd=3, lty=1)
-
-# NW
-hist(rho_matrix[,4], col = "lightblue", main = paste0("6 WK NW ", nrow(rho_matrix), " iterations"), xlab = "Rho")
-abline(v = 0.27, col = "red", lwd=3, lty=1)
+# ----Plotting semi-random 1000 rep results----
+plot_permutation_test(data = results$NH, filename = "nh_test", x_intercept = 0.44, calculate_pvalue = FALSE)
 
 
 
-
-
-# ----Completely random---- 
+# ----Completely random----
 total_iterations <- 1000
 k_neighbors <- 5
 num_nearest <- 20
@@ -441,41 +422,40 @@ pb <- txtProgressBar(min = 0, max = total_iterations, style = 3)
 
 # Begin total_iterations
 for (iteration in 1:total_iterations) {
-  
   iteration_data <- list() # Data for this iteration
   counter <- 1
-  
+
   for (i in 1:length(all_imgs)) {
     # Going through each image
     df <- all_imgs[[i]]
-    df$knn_5_label <- rep(NA, nrow(df))  # Initialize the column
-    df$positive_neighborhood_mean <- rep(NA, nrow(df))  # Initialize the column
-    
+    df$knn_5_label <- rep(NA, nrow(df)) # Initialize the column
+    df$positive_neighborhood_mean <- rep(NA, nrow(df)) # Initialize the column
+
     # For every row / observation within an image
     for (r in 1:nrow(df)) {
       observation <- df[r, ]
       other_points <- df[-r, ]
-      
+
       distances <- euclidean_distance_3d(
         observation$x, observation$y, observation$z,
         other_points$x, other_points$y, other_points$z
       )
-      
+
       # Randomly selecting from all the other points
       random_indices <- sample(1:nrow(other_points), k_neighbors)
       random_points <- other_points[random_indices, ]
-      
+
       intensity_info <- random_points
-      
+
       add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
       df$knn_5_label[r] <- add_p_score
-      
+
       # Calculate distances with intensity information
       if (apply_intensity) {
         distances <- distances[random_indices]
         distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
         distances_updated <- sort(distances_updated, decreasing = FALSE)
-        
+
         if (p_only) {
           intensity_info <- filter(intensity_info, mecp2_p == "P")
         }
@@ -485,23 +465,23 @@ for (iteration in 1:total_iterations) {
         }
       }
     }
-    
+
     iteration_data[[i]] <- df
   }
-  
+
   # Collate data and compute correlations for each condition
   combined_data <- bind_rows(iteration_data)
   conditions <- unique(combined_data$condition)
-  
+
   correlation_results <- list()
   for (cond in conditions) {
     nw_data <- filter(combined_data, condition == cond)
     correlation_test <- cor.test(nw_data$mean, nw_data$positive_neighborhood_mean, method = "spearman", use = "complete.obs")
     correlation_results[[cond]] <- correlation_test$estimate
   }
-  
+
   correlation_values[[paste("Iteration", iteration)]] <- correlation_results
-  
+
   # Update the progress bar
   setTxtProgressBar(pb, iteration)
 }
@@ -523,22 +503,22 @@ all_rhos <- lapply(correlation_values, function(iteration_result) {
 rho_matrix <- do.call(rbind, lapply(all_rhos, unlist))
 
 # SH
-hist(rho_matrix[,1], col = "lightblue", main = "6 WK SH", xlab = "Rho", xlim = c(0.38, 0.60))
-abline(v = 0.58, col = "red", lwd=3, lty=1)
+hist(rho_matrix[, 1], col = "lightblue", main = "6 WK SH", xlab = "Rho", xlim = c(0.38, 0.60))
+abline(v = 0.58, col = "red", lwd = 3, lty = 1)
 
 
 # SW
-hist(rho_matrix[,2], col = "lightblue", main = "6 WK SW", xlab = "Rho", xlim = c(0.33,0.53))
-abline(v = 0.52, col = "red", lwd=3, lty=1)
+hist(rho_matrix[, 2], col = "lightblue", main = "6 WK SW", xlab = "Rho", xlim = c(0.33, 0.53))
+abline(v = 0.52, col = "red", lwd = 3, lty = 1)
 
 
 # NH
-hist(rho_matrix[,3], col = "lightblue", main = "6 WK NH", xlab = "Rho", xlim = c(0.18, 0.45))
-abline(v = 0.44, col = "red", lwd=3, lty=1)
+hist(rho_matrix[, 3], col = "lightblue", main = "6 WK NH", xlab = "Rho", xlim = c(0.18, 0.45))
+abline(v = 0.44, col = "red", lwd = 3, lty = 1)
 
 # NW
-hist(rho_matrix[,4], col = "lightblue", main = "6 WK NW", xlab = "Rho", xlim = c(-0.04,0.28))
-abline(v = 0.27, col = "red", lwd=3, lty=1)
+hist(rho_matrix[, 4], col = "lightblue", main = "6 WK NW", xlab = "Rho", xlim = c(-0.04, 0.28))
+abline(v = 0.27, col = "red", lwd = 3, lty = 1)
 
 # + Neighborhood mean
 test_performed <- "kw"
@@ -1555,7 +1535,7 @@ sh_data <- data.frame(condition = rep("SH", times = length(all_rhos_stored)), rh
 # write.csv(sw_data, "Outputs/sw_1000_permutation_6wk_df.csv")
 # write.csv(sh_data, "Outputs/sh_1000_permutation_6wk_df.csv")
 
-#NH histogram
+# NH histogram
 p1 <- ggplot(data = nh_data, aes(x = rho)) +
   geom_histogram(color = "steelblue", fill = "steelblue") +
   theme(
@@ -1571,7 +1551,7 @@ p1 <- ggplot(data = nh_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(nh_data$condition), " | ", length(all_rhos_stored))) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.44, color = "red")
 
 # SVG
@@ -1582,7 +1562,7 @@ ggsave(plot = p1, filename = "nh_random_knn_5_vs_rho_histogram_6wk.png", device 
 
 
 
-#NW histogram
+# NW histogram
 p1 <- ggplot(data = nw_data, aes(x = rho)) +
   geom_histogram(color = "steelblue", fill = "steelblue") +
   theme(
@@ -1598,7 +1578,7 @@ p1 <- ggplot(data = nw_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(nw_data$condition), " | ", length(all_rhos_stored))) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.27, color = "red")
 
 # SVG
@@ -1624,7 +1604,7 @@ p1 <- ggplot(data = sw_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(sw_data$condition), " | ", length(all_rhos_stored))) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.52, color = "red")
 
 # SVG
@@ -1651,7 +1631,7 @@ p1 <- ggplot(data = sh_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(sh_data$condition), " | ", length(all_rhos_stored))) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.58, color = "red")
 
 # SVG
@@ -1693,7 +1673,7 @@ twelve_df <- twelve_df %>%
 
 twelve_df <- twelve_df %>% group_by(image)
 all_imgs <- twelve_df %>% group_split(twelve_df)
-# Removing this image because it only contains 4 samples and can't be used for KNN = 5 analysis 
+# Removing this image because it only contains 4 samples and can't be used for KNN = 5 analysis
 # all_imgs <- all_imgs[-11]
 
 
@@ -1705,12 +1685,12 @@ for (n in 1:1000) {
     for (r in 1:nrow(df)) {
       observation <- df[r, ]
       other_points <- df[-r, ]
-      
+
       distances <- euclidean_distance_3d(
         observation$x, observation$y, observation$z,
         other_points$x, other_points$y, other_points$z
       )
-      
+
       # Selecting random neighbors
       if (random_num_neighbors) {
         k_nearest_indices <- sample(nrow(other_points), k_neighbors, replace = TRUE)
@@ -1723,18 +1703,18 @@ for (n in 1:1000) {
         k_nearest_indices <- order(distances)[1:k_neighbors]
         k_nearest_points <- other_points[k_nearest_indices, ]
       }
-      
+
       intensity_info <- other_points[k_nearest_indices, ]
       add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
       observation$knn_5_label <- add_p_score
       all_p_scores[[counter]] <- add_p_score
-      
+
       # Calculate distances with intensity information
       if (apply_intensity) {
         distances <- distances[k_nearest_indices]
         distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
         distances_updated <- sort(distances_updated, decreasing = FALSE)
-        
+
         # Calculate updated distances with intensity information for just P neighbors
         if (p_only) {
           intensity_info <- filter(intensity_info, mecp2_p == "P")
@@ -1754,9 +1734,9 @@ for (n in 1:1000) {
       }
     }
   }
-  # Binding all observations from this group of images 
+  # Binding all observations from this group of images
   test_df <- bind_rows(all_data)
-  
+
   # Calculating rho
   cor_res <- cor.test(x = test_df$mean, y = test_df$positive_neighborhood_mean, method = "spearman")
   current_p <- cor_res$p.value
@@ -1774,7 +1754,7 @@ sh_data <- data.frame(condition = rep("SH", times = length(all_rhos_stored)), rh
 # write.csv(sw_data, "Outputs/sw_1000_permutation_12wk_df.csv")
 # write.csv(sh_data, "Outputs/sh_1000_permutation_12wk_df.csv")
 
-#NH histogram
+# NH histogram
 p1 <- ggplot(data = nh_data, aes(x = rho)) +
   geom_histogram(color = "steelblue", fill = "steelblue") +
   theme(
@@ -1790,7 +1770,7 @@ p1 <- ggplot(data = nh_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(nh_data$condition), " | ", length(all_rhos_stored), " | 12 WK")) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.17, color = "red")
 
 # SVG
@@ -1801,7 +1781,7 @@ ggsave(plot = p1, filename = "nh_random_knn_5_vs_rho_histogram_12wk.png", device
 
 
 
-#NW histogram
+# NW histogram
 p1 <- ggplot(data = nw_data, aes(x = rho)) +
   geom_histogram(color = "steelblue", fill = "steelblue") +
   theme(
@@ -1817,7 +1797,7 @@ p1 <- ggplot(data = nw_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(nw_data$condition), " | ", length(all_rhos_stored), " | 12 WK")) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.27, color = "red")
 
 # SVG
@@ -1843,7 +1823,7 @@ p1 <- ggplot(data = sw_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(sw_data$condition), " | ", length(all_rhos_stored), " | 12 WK")) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.52, color = "red")
 
 # SVG
@@ -1870,7 +1850,7 @@ p1 <- ggplot(data = sh_data, aes(x = rho)) +
   ggtitle(paste0("K = 5 | ", unique(sh_data$condition), " | ", length(all_rhos_stored), " | 12 WK")) +
   xlab(expression(rho)) +
   ylab("Count") +
-  scale_y_continuous(expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0)) +
   geom_vline(xintercept = 0.58, color = "red")
 
 # SVG
@@ -1878,5 +1858,3 @@ ggsave(plot = p1, filename = "sh_random_knn_5_vs_rho_histogram_12wk.svg", device
 
 # PNG
 ggsave(plot = p1, filename = "sh_random_knn_5_vs_rho_histogram_12wk.png", device = "png", width = 10, height = 10, units = "in", path = "Outputs/knn_analysis/plots/")
-
-
