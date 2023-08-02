@@ -4,6 +4,7 @@ pacman::p_load(
   caret, # Tools for training and evaluating predictive models
   class, # Functions for nearest neighbor classification
   deldir, # Delaunay triangulation and Dirichlet (Voronoi) tesselation
+  doParallel, # Additional parallel functions
   effectsize, # Functions for calculating standardized effect sizes
   foreach, # Functions for parallel computing
   ggforce, # Additional geometries, stats, scales and themes for ggplot2
@@ -37,8 +38,6 @@ six_wk_data <- six_wk_data %>%
 six_wk_data <- six_wk_data %>% group_by(filename)
 all_imgs <- six_wk_data %>% group_split(six_wk_data)
 
-
-# ----Loading euclidean distance function----
 # ----Loading plotting function made in improved_knn_permutation.R----
 #' Plot histogram for permutation test results
 #'
@@ -189,110 +188,18 @@ euclidean_distance_3d <- function(x1, y1, z1, x2, y2, z2) {
   sqrt((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)
 }
 
-# ----Finished semi-random code----
-# Initialize
-total_iterations <- 25
-num_nearest <- 15
-k_neighbors <- 5
-correlation_values <- list() # To store correlation results per condition per iteration
-conditions <- unique(six_wk_data$condition)
-pb <- txtProgressBar(min = 0, max = total_iterations, style = 3)
-
-# Begin iterations
-for (iteration in 1:total_iterations) {
-  iteration_data <- list() # Data for this iteration
-  counter <- 1
-
-  for (i in 1:length(all_imgs)) {
-    # Going through each image
-    df <- all_imgs[[i]]
-    df$knn_5_label <- rep(0, nrow(df))
-
-    # For every row / observation within an image
-    for (r in 1:nrow(df)) {
-      observation <- df[r, ]
-      other_points <- df[-r, ]
-
-      distances <- euclidean_distance_3d(
-        observation$x, observation$y, observation$z,
-        other_points$x, other_points$y, other_points$z
-      )
-
-      # Ensure there are enough points to select num_nearest
-      if (length(distances) >= num_nearest) {
-        num_nearest_indices <- order(distances)[1:num_nearest]
-        num_nearest_points <- other_points[num_nearest_indices, ]
-      } else {
-        next # Skip this observation if there aren't enough neighbors
-      }
-
-      # If num_nearest and k_neighbors are the same, no need for further sampling
-      if (num_nearest == k_neighbors) {
-        k_nearest_points <- num_nearest_points
-      } else {
-        sampled_indices <- sample(1:length(num_nearest_points), k_neighbors)
-        k_nearest_points <- num_nearest_points[sampled_indices, ]
-      }
-
-      intensity_info <- k_nearest_points
-      add_p_score <- sum((intensity_info$mecp2_p == "P")) / k_neighbors
-      observation$knn_5_label <- add_p_score
-
-      if (apply_intensity) {
-        distances <- distances[num_nearest_indices]
-        distances_updated <- rescale(distances * intensity_info$mean, to = c(0, 1))
-        distances_updated <- sort(distances_updated, decreasing = FALSE)
-
-        if (p_only) {
-          intensity_info <- filter(intensity_info, mecp2_p == "P")
-          if (nrow(intensity_info) == 0) {
-            writeLines("This sample has only N neighbors.\nIt is being excluded from this analysis.")
-          }
-        }
-
-        if (calc_mean_intensity) {
-          df$positive_neighborhood_mean <- rep(0, nrow(df))
-          mean_of_neighbors <- mean(intensity_info$mean)
-          neighbor_means <- c(neighbor_means, mean_of_neighbors)
-          observation$positive_neighborhood_mean <- mean_of_neighbors
-          iteration_data[[counter]] <- observation
-          counter <- counter + 1
-        }
-      }
-    }
-  }
-
-  # Combine data for this iteration
-  combined_data <- bind_rows(iteration_data)
-
-  # Calculating correlation for each condition
-  for (cond in conditions) {
-    specific_data <- filter(combined_data, condition == cond)
-    correlation_test <- cor.test(specific_data$mean, specific_data$positive_neighborhood_mean, method = "spearman", use = "complete.obs")
-    correlation_values[[paste(cond, "Iteration", iteration)]] <- correlation_test$estimate
-  }
-
-  # Update the progress bar
-  setTxtProgressBar(pb, iteration)
-}
-
-# Close the progress bar
-close(pb)
-
-
-
-
 # ----Semi-random parallel code----
-# Load required library for parallel processing
-library(parallel)
-library(doParallel)
-
 # Function to process one iteration
 process_iteration <- function(iteration, max_iterations = 1000, time_point_to_use = 6, all_imgs, num_nearest, k_neighbors = 5, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE, conditions = c("NW", "SW", "NH", "SH")) {
+  
+  random_seed <- runif(1, max_iterations, 100000)
+  set.seed(random_seed)
+  
   correlation_values <- list()
   counter <- 1
   iteration_data <- list()
 
+  
   for (i in 1:length(all_imgs)) {
     df <- all_imgs[[i]]
     df$knn_5_label <- rep(0, nrow(df))
@@ -314,9 +221,10 @@ process_iteration <- function(iteration, max_iterations = 1000, time_point_to_us
       }
 
       if (num_nearest == k_neighbors) {
-        k_nearest_points <- num_nearest_points
+        sampled_indices <- sample(1:nrow(num_nearest_points), k_neighbors, replace = TRUE)
+        k_nearest_points <- num_nearest_points[sampled_indices,]
       } else {
-        sampled_indices <- sample(1:length(num_nearest_points), k_neighbors)
+        sampled_indices <- sample(1:nrow(num_nearest_points), k_neighbors, replace = TRUE)
         k_nearest_points <- num_nearest_points[sampled_indices, ]
       }
 
@@ -370,6 +278,7 @@ process_iteration <- function(iteration, max_iterations = 1000, time_point_to_us
       combined_data$k_value <- rep(k_neighbors, nrow(combined_data))
       combined_data$time_point <- rep(6, nrow(combined_data))
       combined_data$num_iterations <- rep(max_iterations, nrow(combined_data))
+      
       current_df <- data.frame(
         search_space = rep(num_nearest, nrow(specific_data)),
         k_value = rep(k_neighbors, nrow(specific_data)),
@@ -395,19 +304,74 @@ cl <- makeCluster(num_cores)
 registerDoParallel(cl)
 
 # Parallelized loop using foreach for an individual search space value
-total_iterations <- 1000
-results <- foreach(iteration = 1:total_iterations, .combine = c) %dopar% {
-  process_iteration(iteration, max_iterations = total_iterations, all_imgs = all_imgs, num_nearest = , k_neighbors = 5, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE, conditions = TRUE)
+# total_iterations <- 4
+# all_results <- list()
+# counter <- 1
+# search_space <- seq(5,50,5)
+# for (s in search_space) {
+#   for (i in 1:1000) {
+#     results <- foreach(iteration = 1:total_iterations, .combine = c) %dopar% {
+#       process_iteration(iteration, max_iterations = total_iterations, all_imgs = all_imgs, num_nearest = s, k_neighbors = 5, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE, conditions = TRUE)
+#     }
+#     
+#     all_results[[counter]] <- results
+#     counter <- counter + 1
+#   }
+# }
+# 
+# 
+# # Close the parallel backend
+# stopCluster(cl)
+
+
+# With progress bar
+total_iterations <- 1
+all_results <- list()
+counter <- 1
+search_space <- seq(5,50,5)
+
+# Define the total number of tasks
+total_tasks <- length(search_space) * 1000
+
+# Create a progress bar
+pb <- txtProgressBar(min = 0, max = total_tasks, style = 3)
+
+for (s in search_space) {
+  for (i in 1:1000) {
+    results <- foreach(iteration = 1:total_iterations, .combine = c) %dopar% {
+      process_iteration(iteration, max_iterations = total_iterations, all_imgs = all_imgs, num_nearest = s, k_neighbors = 5, apply_intensity = TRUE, p_only = TRUE, calc_mean_intensity = TRUE, conditions = TRUE)
+    }
+    
+    # Remove elements with empty names
+    results <- results[names(results) != ""]
+    
+    all_results[[paste0("Iteration ", counter, " Search Space ", s)]] <- results
+    counter <- counter + 1
+    
+    # Update the progress bar
+    setTxtProgressBar(pb, counter)
+  }
 }
 
+# Close the progress bar
+close(pb)
 
 # Close the parallel backend
 stopCluster(cl)
 
 
 
+
+# x-intercepts (6 wk): NW: 0.27, NH: 0.44, SW: 0.52, SH: 0.58
+conds <- c("NW", "NH", "SW", "SH")
+x_ints <- c(0.27, 0.44, 0.52, 0.58)
+
 # ----Plotting semi-random 1000 rep results----
-plot_permutation_test(data = results$NH, filename = "nh_test", x_intercept = 0.44, calculate_pvalue = FALSE)
+for (cond in conds) {
+  for (x in x_ints) {
+    plot_permutation_test(data = results[[paste0(cond)]], filename = paste0(c,"_test2_50_nn"), x_intercept = x, calculate_pvalue = FALSE)
+  }
+}
 
 
 
