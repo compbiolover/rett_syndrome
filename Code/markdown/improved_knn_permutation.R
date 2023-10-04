@@ -345,7 +345,6 @@ plot_permutation_test <- function(data,
                                   text_color = "red", 
                                   calculate_pvalue = TRUE,
                                   p_value_test = "less",
-                                  plot_pvalue = FALSE,
                                   test_type = "One Sample t-test",
                                   test_direction = "Lesser") {
   # Required packages
@@ -354,10 +353,10 @@ plot_permutation_test <- function(data,
   library(scales)
 
   # Extracting the relevant pieces of data that will be used in building the plot
-  time_point <- unique(data$time)
-  k_value <- unique(data$k)
+  time_point <- unique(data$time_point)
+  k_value <- unique(data$k_value)
   num_permutations <- unique(data$num_iterations)
-  num_ks <- unique(data$k_search_space)
+  num_ks <- unique(data$search_space)
 
   # Modifying the title of plots that are generated with max randomness
   if (num_ks == "max_randomness") {
@@ -402,7 +401,7 @@ plot_permutation_test <- function(data,
       ylab("Count") +
       scale_y_continuous(expand = c(0, 0)) +
       geom_vline(xintercept = x_intercept, color = line_color) +
-      labs(subtitle = paste(test_type, " (", test_direction, ")", sep = ""))
+      labs(subtitle = paste(test_type, " (", test_direction, ")\np-value: ", round(p_value_comp$p.value, digits = 4), sep = ""))
     
     
 
@@ -412,24 +411,24 @@ plot_permutation_test <- function(data,
   
   # If calculated p-value is less than 2.2e-16 than add subtitle mentioning raw p-value
   if (p_value_comp$p.value < 2.2e-16) {
-    p <- p + labs(subtitle = paste(test_type, " (", test_direction, ")\nRaw p-value < 2.2e-16", sep = ""))
-    # p <- p + labs(subtitle = "Raw p-value < 2.2e-16")
+    p <- p + labs(subtitle = paste(test_type, " (", test_direction, ")\np-value: ", round(p_value_comp$p.value, digits = 4), "\nRaw p-value < 2.2e-16", sep = ""))
+    # p <- p + labs(subtitle = paste(test_type, " (", test_direction, ")\nRaw p-value < 2.2e-16", sep = ""))
   }
   
   
   # Plot p-value if required
-  if (plot_pvalue) {
-    # Plot the histogram with p-value information
-    p <- p + annotate(
-      geom = "text",
-      x = x_intercept - (width * 0.0001),
-      y = height * 0.8,
-      label = bquote(italic("p") ~ "=" ~ .(round(p_value_comp$p.value, 4))),
-      color = text_color,
-      size = 10 * text_scale,
-      hjust = 0
-    )
-  }
+  # if (plot_pvalue) {
+  #   # Plot the histogram with p-value information
+  #   p <- p + annotate(
+  #     geom = "text",
+  #     x = x_intercept - (width * 0.0001),
+  #     y = height * 0.25,
+  #     label = bquote(italic("p") ~ "=" ~ .(round(p_value_comp$p.value, 4))),
+  #     color = text_color,
+  #     size = 10 * text_scale,
+  #     hjust = 0
+  #   )
+  # }
   
 
   # Convert width and height to inches
@@ -517,7 +516,7 @@ permutation_condition_analysis <- function(current_cond = NULL,
     p_values <- c()
     counter <- 1
     # Repeat the permutation analysis for the current condition
-    for (iteration in 1:num_iterations) {
+    results <- foreach(i = 1:num_iterations) %dopar% {
       # Create an empty vector to store the iteration results
       iteration_rhos <- vector()
       iteration_p_values <- vector()
@@ -532,10 +531,21 @@ permutation_condition_analysis <- function(current_cond = NULL,
           
           if (random_num_neighbors) {
             # First calculate distances
-            distances <- euclidean_distance_3d(
+            # distances <- euclidean_distance_3d(
+            #   observation$x, observation$y, observation$z,
+            #   other_points$x, other_points$y, other_points$z
+            # )
+            
+            
+            distances_matrix <- euclidean_distance_matrix(
               observation$x, observation$y, observation$z,
-              other_points$x, other_points$y, other_points$z
+              df$x, df$y, df$z
             )
+            
+            # Extract the distances for the current observation
+            distances <- distances_matrix[r, ]
+            
+            
             # Then subset to the neighbors within num_nearest with order
             k_nearest_indices <- order(distances)[1:num_nearest]
             # Then subset the other points to the nearest_indices
@@ -615,14 +625,16 @@ permutation_condition_analysis <- function(current_cond = NULL,
     }
     
     # Append the results of all iterations for the current condition to the all_results list
-    all_results[[cond]] <- do.call(rbind, results)
+    # all_results[[cond]] <- do.call(rbind, results)
+    all_results[[cond]] <- bind_rows(results)
   }
   
   # Stop the parallel backend
   stopImplicitCluster()
   
   # Combine the results for all conditions into a single data frame
-  result_df <- do.call(rbind, all_results)
+  # result_df <- do.call(rbind, all_results)
+  result_df <- bind_rows(all_results)
   # Make the row names numeric. Represents the number of iterations
   rownames(result_df) <- 1:nrow(result_df)
   
@@ -633,6 +645,162 @@ permutation_condition_analysis <- function(current_cond = NULL,
 
 
 
+# Vectorized euclidean distance 3D calculation
+euclidean_distance_matrix <- function(x, y, z, other_x, other_y, other_z) {
+  matrix_x <- matrix(other_x, nrow=length(x), ncol=length(other_x), byrow=TRUE) - matrix(rep(x, times=length(other_x)), ncol=length(other_x))
+  matrix_y <- matrix(other_y, nrow=length(y), ncol=length(other_y), byrow=TRUE) - matrix(rep(y, times=length(other_y)), ncol=length(other_y))
+  matrix_z <- matrix(other_z, nrow=length(z), ncol=length(other_z), byrow=TRUE) - matrix(rep(z, times=length(other_z)), ncol=length(other_z))
+  
+  distances <- sqrt(matrix_x^2 + matrix_y^2 + matrix_z^2)
+  return(distances)
+}
+
+
+#' Efficient k-Nearest Neighbors (KNN) function
+#'
+#' @param df A data frame containing the observations. The data frame should have at least 'x', 'y', 'z', 'mean', and 'mecp2_p' columns.
+#' @param k The number of nearest neighbors to consider.
+#' @param random_num_neighbors Logical indicating whether to perform random KNN analysis.
+#' @param num_nearest If random_num_neighbors is TRUE, this specifies the number of neighbors within which to sample.
+#' @param max_randomness Logical. If TRUE, it performs maximum randomness by sampling from the entire dataset.
+#' @param apply_intensity Logical. If TRUE, it applies intensity calculations.
+#' @param p_only Logical. If TRUE, it subsets to only those neighbors with mecp2_p == "P".
+#' @param calc_mean_intensity Logical. If TRUE, calculates mean of the 'mean' values of the neighbors.
+#' @param random_seed Optional integer seed for reproducibility. Default is 1689016866.
+#' @param with_replacement Should sampling of the num_nearest analysis be done with replacement. Default is TRUE.
+#'
+#' @return A list containing indices of nearest neighbors, and related calculations for each observation in `df`.
+
+efficient_knn <- function(df, k, random_num_neighbors = FALSE, num_nearest = NULL, 
+                          max_randomness = FALSE, apply_intensity = FALSE, p_only = FALSE, 
+                          calc_mean_intensity = FALSE, random_seed = 1689016866, with_replacement = TRUE) {
+  
+  # Set the random seed for reproducibility
+  if (!is.null(random_seed)) {
+    set.seed(random_seed)
+  }
+  
+  # Create an original_index column if not present
+  if (!"original_index" %in% colnames(df)) {
+    df$original_index <- 1:nrow(df)
+  }
+  
+  # Compute distance matrix for all points in df
+  xyz <- df[, c("x", "y", "z")]
+  distances_matrix <- as.matrix(dist(xyz))
+  
+  # Placeholder for storing results
+  results <- list()
+  
+  # Iterate over each row in df
+  for (i in seq_len(nrow(df))) {
+    observation <- df[i,]
+    
+    if (random_num_neighbors) {
+      nearest_indices <- order(distances_matrix[i,])[2:(num_nearest + 1)]  # +1 because the first will be itself
+      sampled_indices <- sample(nearest_indices, size = k, replace = with_replacement)
+    } else if (max_randomness) {
+      sampled_indices <- sample(nrow(df), k, replace = with_replacement)
+    } else {
+      sampled_indices <- order(distances_matrix[i,])[2:(k + 1)]  # +1 because the first will be itself
+    }
+    
+    k_nearest_points <- df[sampled_indices,]
+    
+    # Calculating other parts of the score beyond just KNN
+    add_p_score <- sum((k_nearest_points$mecp2_p == "P")) / k
+    observation$knn_label <- add_p_score
+    
+    if (apply_intensity) {
+      intensities <- distances_matrix[i, k_nearest_points$original_index]
+      distances_updated <- scales::rescale(intensities * k_nearest_points$mean, to = c(0, 1))
+      distances_updated <- sort(distances_updated, decreasing = FALSE)
+      
+      # Filter based on mecp2_p value if required
+      if (p_only) {
+        k_nearest_points <- k_nearest_points[k_nearest_points$mecp2_p == "P",]
+        if (nrow(k_nearest_points) == 0) {
+          message("This sample has only N neighbors. It is being excluded from this analysis.")
+          next
+        }
+      }
+      
+      if (calc_mean_intensity) {
+        mean_of_neighbors <- mean(k_nearest_points$mean)
+        observation$positive_neighborhood_mean <- mean_of_neighbors
+      }
+    }
+    
+    # results[[i]] <- list(observation = observation, 
+    #                      nearest_points = k_nearest_points, 
+    #                      distances_updated = if(apply_intensity) distances_updated else NULL)
+    
+    results[[i]] <- observation
+  }
+  
+  return(results)
+}
+
+
+
+#' Search for Files by Pattern, Filter, and Perform Spearman Correlation
+#'
+#' @param directory Character. The directory path where the files are stored.
+#' @param pattern Character. The regex pattern to match file names.
+#' @param condition_column Character. Name of the column against which the condition is evaluated.
+#' @param condition Character. A string value (NH, NW, SH, or SW) to filter the data on the `condition_column`.
+#' 
+#' @return A dataframe containing the correlation analysis results for each file.
+#' 
+#' @examples
+#' \dontrun{
+#'   # Assuming you have files in the directory "./data" and you want to match files with the pattern "data_"
+#'   # And you want to filter the rows where condition_column matches "NH"
+#'   result_df <- search_and_bind_files(directory = "./data", pattern = "data_", condition_column = "group", condition = "NH")
+#' }
+search_and_bind_files <- function(directory, pattern, condition) {
+  
+  matching_files <- list.files(path = directory, pattern = pattern, full.names = TRUE)
+  
+  if (length(matching_files) == 0) {
+    warning("No files matched the specified pattern.")
+    return(NULL)
+  }
+  
+  # Vectors to store the rho values and p-values
+  rhos <- c()
+  p_values <- c()
+  conditions <- c()
+  
+  
+  for (file in matching_files) {
+    data <- read.csv(file)
+    
+    # Filter data by the condition
+    filtered_data <- dplyr::filter(data, condition == {{condition}})
+    
+    # Perform Spearman correlation analysis
+    correlation_result <- cor.test(filtered_data$mean, filtered_data$positive_neighborhood_mean, 
+                                   method = "spearman")
+    
+    # Append the rho and p-value to their respective vectors
+    rhos <- c(rhos, correlation_result$estimate)
+    p_values <- c(p_values, correlation_result$p.value)
+    conditions <- c(conditions, condition)
+  }
+  
+  result_df <- tibble(
+    condition = conditions,
+    rho = rhos,
+    p_value = p_values,
+    time_point = rep(unique(filtered_data$time), length(conditions)),
+    search_space = rep(str_extract(file, pattern = "(5|10|15|20|25|30|35|40|45|50)"), length(conditions)),
+    k_value = rep(5, length(conditions)),
+    num_iterations = rep(str_extract(file, pattern = "\\d+(?=_num_iterations)"), length(conditions))
+  )
+  
+  return(result_df)
+}
 
 
 
@@ -651,11 +819,12 @@ six_wk_data <- six_wk_data %>%
   mutate(hemisphere = str_extract(filename, "(LH|RH)")) %>%
   mutate(condition = str_extract(filename, "(NW|NH|SW|SH)")) %>%
   filter(mecp2_p == "P") %>%
-  mutate(id = 1:nrow(.)) %>%
+  mutate(original_index = 1:nrow(.)) %>%
   mutate(time = 6)
 
 six_wk_data <- six_wk_data %>% group_by(filename)
 all_imgs <- six_wk_data %>% group_split(six_wk_data)
+
 
 # 12 week data
 twelve_wk_data <- read.csv("Data/Old data/Jacob/12WOcombined_output_MECP2.csv")
@@ -679,137 +848,102 @@ twelve_wk_data <- twelve_wk_data %>%
 twelve_wk_data <- twelve_wk_data %>% group_by(filename)
 all_imgs <- twelve_wk_data %>% group_split(twelve_wk_data)
 
+# ---- 6 Week True rho ----
+current_search <- efficient_knn(df = six_wk_data,
+                                k = 5, 
+                                random_num_neighbors = FALSE,
+                                num_nearest = 5,
+                                max_randomness = FALSE,
+                                apply_intensity = TRUE,
+                                p_only = TRUE,
+                                calc_mean_intensity = TRUE,
+                                random_seed = 1689016866, 
+                                with_replacement = FALSE)
+
+current_search <- bind_rows(current_search)
+write.csv(current_search, file = paste0("Outputs/knn_analysis/data/true_neighbors_analysis/",tolower(unique(current_search$time)),"_",s, "_KNNs_searched_",num_iters,"_num_iterations_iteration_",i,"_with_replacement.csv"))
+
+
+# Calculating rho
+# Now reading in all of the search space files for each value and binding them together for correlation analysis
+all_cors <- list()
+
+for (c in conds) {
+    current_cond_search <- search_and_bind_files(directory = "Outputs/knn_analysis/data/true_neighbors_analysis/", pattern = paste0("6_5_KNNs_searched"), condition = paste0(c)) 
+    all_cors[[paste0(c)]] <- current_cond_search
+}
+
 
 
 
 # ---- 6 Week Permutation Test Across Search Space ----
-# All conditions 1000 permutations at 5-50 search space with steps of 5
-search_space <- seq(5, 50, 5)
-conds <- c("NW", "NH", "SW", "SH")
-all_current_cond_searches <- list()
-all_searches <- list()
-counter <- 1
-
-for (c in conds) {
-  current_cond <- six_wk_data %>%
-    filter(condition == c)
-
-  current_cond <- current_cond %>% group_by(filename)
-  # all_imgs <- current_cond %>% group_split(current_cond)
-
-  all_current_cond_searches <- list()  # Create a new list for each condition
-  
-  for (s in search_space) {
-    current_search <- permutation_knn_analysis(all_imgs,
-      num_nearest = s,
-      custom_seed = 1689016866,
-      k = 5,
-      num_iterations = 10,
-      num_cores = 1,
-      random_num_neighbors = TRUE,
-      max_randomness = FALSE,
-      apply_intensity = TRUE,
-      p_only = TRUE,
-      calc_mean_intensity = TRUE
-    )
-
-    # Append the result of the new search space to all results
-    all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
-    # write.csv(current_search, file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations.csv"))
-  }
-  
-  all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
-  counter <- counter + 1
-}
-
-
-
 # Doing it only for conditions 
 search_space <- seq(5, 50, 5)
 conds <- c("NW", "NH", "SW", "SH")
-all_current_cond_searches <- list()
 all_searches <- list()
 counter <- 1
+num_iters <- 50
 
-for (c in conds) {
-  current_cond <- six_wk_data %>%
-    filter(condition == c)
-  
-  current_cond <- current_cond %>% group_by(filename)
-  
-  all_current_cond_searches <- list()  # Create a new list for each condition
-  
   for (s in search_space) {
-    current_search <- permutation_condition_analysis(current_cond,
-                                               num_nearest = s,
-                                               custom_seed = 1689016866,
-                                               k = 5,
-                                               num_iterations = 10,
-                                               num_cores = 1,
-                                               random_num_neighbors = TRUE,
-                                               max_randomness = FALSE,
-                                               apply_intensity = TRUE,
-                                               p_only = TRUE,
-                                               calc_mean_intensity = TRUE
-    )
+    for (i in 1:num_iters){
+      current_search <- efficient_knn(df = six_wk_data,
+                                      k = 5, 
+                                      random_num_neighbors = FALSE,
+                                      num_nearest = s,
+                                      max_randomness = FALSE,
+                                      apply_intensity = TRUE,
+                                      p_only = TRUE,
+                                      calc_mean_intensity = TRUE,
+                                      random_seed = NULL, 
+                                      with_replacement = TRUE)
+      
+      current_search <- bind_rows(current_search)
+      write.csv(current_search, file = paste0("Outputs/knn_analysis/data/true_neighbors_analysis/",tolower(unique(current_search$time)),"_",s, "_KNNs_searched_",num_iters,"_num_iterations_iteration_",i,"_with_replacement.csv"))
+    }
     
-    # Append the result of the new search space to all results
-    all_current_cond_searches[[paste0(s, "_KNNs_Searched")]] <- current_search
-    write.csv(current_search, file = paste0("Outputs/knn_analysis/data/semi_random_analysis/",tolower(unique(current_search$condition)),"_",s, "_KNNs_searched_",unique(current_search$num_iterations), "_num_iterations_new_code.csv"))
   }
   
-  all_searches[[paste0(counter,"_", c)]] <- all_current_cond_searches
-  counter <- counter + 1
+
+# Now reading in all of the search space files for each value and binding them together for correlation analysis
+all_cors <- list()
+
+for (c in conds) {
+  for (s in search_space) {
+    current_cond_search <- search_and_bind_files(directory = "Outputs/knn_analysis/data/semi_random_analysis/", pattern = paste0("6_",s,"_KNNs_searched"), condition = paste0(c)) 
+    all_cors[[paste0(c,"_", s)]] <- current_cond_search
+  }
 }
-
-
 
 # ---- Plotting 6 Week Semi-random Results ----
 # Looping through all outputs again to make combo plot for easier comparison of results
 combo_plot_list <- list()
 observed_rhos <- c(0.27, 0.44, 0.52, 0.58)
 
-for (c in 1:length(observed_rhos)) {
-  observed_rho <- observed_rhos[c]
-  for (s in 1:length(all_searches[[2]])) {
-    combo_plot_list[[paste0(c, "_", s)]] <- plot_permutation_test(all_searches[[c]][[s]], paste0(tolower(conds[c]), "_semi_random_knn_vs_rho_histogram_", s, "_", tolower(unique(current_search$num_iterations)), "_permutations"), observed_rho,
-      plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
-      hist_fill = "lightblue", line_color = "red", text_color = "red"
-    )
+
+counter <- 1
+combo_plot_list <- list()
+for (cond in conds){
+  current_cod_list <- all_cors[grep(c, names(all_cors))]
+  observed_rho <- observed_rhos[counter]
+  counter2 <- 1
+  for (s in seq_along(current_cod_list)) {
+    combo_plot_list[[paste0(c, "_", s, "_", counter2)]] <- plot_permutation_test(current_cod_list[[s]], paste0(tolower(c), "_semi_random_knn_vs_rho_histogram_", s, "_", tolower(unique(current_cond_search$num_iterations)), "_permutations"), observed_rho,
+                                                                  plot_size = 2.5, base_plot_size = 8, dpi = 600, hist_color = "blue",
+                                                                  hist_fill = "lightblue", line_color = "red", text_color = "red")
+    counter2 <- counter2 + 1
   }
-  
-  # Making combo plot
-  combo_plot <- ggarrange(plotlist = combo_plot_list,
-                          ncol = 2,
-                          nrow = 5,
-                          labels = "AUTO",
-                          align = "hv", 
-                          font.label = list(size = 18, face = "bold"))
-  
-  
-  # Saving combo plot in PNG
-  ggsave(plot = combo_plot,
-         device = "png",
-         path = "Outputs/knn_analysis/plots/", 
-         filename = paste0(tolower(conds[c]),"_semi_random_searches_",tolower(unique(current_search$num_iterations)),"_combo.png"),
-         units = "in",
-         dpi = 600,
-         width = 8,
-         height = 8)
-  
-  
-  # Saving combo plot in SVG
-  ggsave(plot = combo_plot,
-         device = "svg",
-         path = "Outputs/knn_analysis/plots/", 
-         filename = paste0(tolower(conds[c]),"_semi_random_searches_",tolower(unique(current_search$num_iterations)),"_combo.svg"),
-         units = "in",
-         dpi = 600,
-         width = 8,
-         height = 8)
-  
-  # Reset the combo list
-  combo_plot_list <- list()
+  combo_plot <- ggarrange(plotlist = combo_plot_list, ncol = 2, nrow = 5, labels = "AUTO", font.label = list(size = 18), align = "hv")
+  ggsave(
+    plot = combo_plot[[1]],
+    device = "png",
+    path = "Outputs/knn_analysis/plots/",
+    filename = paste0("combo_max_random_searches_",unique(current_cond_list[[1]]$num_iterations),"_combo.png"),
+    units = "in",
+    dpi = 600,
+    width = 8,
+    height = 8
+  )
+  counter <- counter + 1
 }
 
 
