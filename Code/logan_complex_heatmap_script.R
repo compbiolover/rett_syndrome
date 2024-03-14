@@ -32,7 +32,10 @@ setwd("~/Documents/Work/Phd_program/hong_lab/Projects/rett_syndrome")
 
 # T-tests with ComplexHeatmap
 # Analyzing combined hemispheres
-test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5"), c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5")))
+# test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5"), c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5")))
+
+# Matrix for Jacob's data
+test_mat <- matrix(data = 0, nrow = 6, ncol = 6, dimnames = list(c("NW", "NH", "SWD2", "SWD6", "SHD2", "SHD6"), c("NW", "NH", "SWD2", "SWD6", "SHD2", "SHD6")))
 
 comparisons <- list()
 my_estimates <- list()
@@ -67,12 +70,18 @@ read_files <- function(folder_path, pattern) {
 }
 
 
-all_plot_data <- read_files(folder_path = "Outputs/pnn_analysis/density_data/111722/", pattern = "*.csv")
-all_plot_data <- all_plot_data %>%
-  mutate(condition = ifelse(condition == "SH P0-P1", "SHP1", condition)) %>%
-  mutate(condition = ifelse(condition == "SH P0-P5", "SHP5", condition)) %>%
-  mutate(condition = ifelse(condition == "SW P0-P1", "SWP1", condition)) %>%
-  mutate(condition = ifelse(condition == "SW P0-P5", "SWP5", condition))
+# all_plot_data <- read_files(folder_path = "Outputs/pnn_analysis/density_data/111722/", pattern = "*.csv")
+# all_plot_data <- read_files(folder_path = "~/Desktop/test_heatmaps/test_mclust/", pattern = "*.csv")
+# all_plot_data <- all_plot_data %>%
+#   mutate(condition = ifelse(condition == "SH P0-P1", "SHP1", condition)) %>%
+#   mutate(condition = ifelse(condition == "SH P0-P5", "SHP5", condition)) %>%
+#   mutate(condition = ifelse(condition == "SW P0-P1", "SWP1", condition)) %>%
+#   mutate(condition = ifelse(condition == "SW P0-P5", "SWP5", condition))
+
+
+# Jacob's new data
+all_plot_data <- read.csv("Data/combined_JE_results.csv", row.names = 1)
+all_plot_data <- all_plot_data %>% select(-X)
 
 
 # This code snippet is part of a larger script designed for statistical analysis and visualization of data across different subregions and conditions. Here's a summary for your collaborator:
@@ -92,19 +101,36 @@ all_plot_data <- all_plot_data %>%
 # Final Processing:
 # The code identifies and corrects zero values within the lower estimates matrix by replacing them with corresponding non-zero values from the upper estimates, ensuring a complete matrix of estimate differences for visualization or further analysis.
 
-for (s in unique(all_plot_data$subregion)[10]) {
+for (s in unique(all_plot_data$subregion)[7]) {
   current_df <- filter(all_plot_data, subregion == s)
   for (c in comparisons) {
     conds <- strsplit(c, "_")
-    # cond_y <- conds[[1]][2]
-    # cond_x <- conds[[1]][1]
     cond_y <- conds[[1]][1]
     cond_x <- conds[[1]][2]
     current_df_sub <- filter(current_df, condition == cond_x | condition == cond_y)
+    current_df_sub <- current_df_sub %>%
+      mutate(order_cond = ifelse(condition == cond_y, 1, 2)) %>%
+      arrange(order_cond) %>%
+      select(-order_cond) # Optionally, remove the helper column after arranging
+    
+    # Check if cond_x and cond_y are the same
+    if (cond_x != cond_y) {
+      # If they are different, set the levels in the specified order
+      current_df_sub$condition <- factor(current_df_sub$condition, levels = c(cond_y, cond_x))
+      print(table(current_df_sub$condition))
+    } else {
+      # If they are the same, use just one as the level
+      current_df_sub$condition <- factor(current_df_sub$condition, levels = c(cond_x))
+      print(table(current_df_sub$condition))
+    }
+    
+    
     if (length(table(current_df_sub$condition)) < 2) {
       current_comp <- c()
       current_comp$estimate <- NA
       current_comp$p.adj.signif <- ""
+      current_comp$group1 <- NA
+      current_comp$group2 <- NA
       my_estimates[[paste0(cond_x, cond_y)]] <- current_comp$estimate
       my_sigs[[paste0(cond_x, cond_y)]] <- current_comp$p.adj.signif
       my_t_tests[[paste0(cond_x, "_", cond_y)]] <- c(0, 0, 0, my_mean, names(table(current_df_sub$condition)), names(table(current_df_sub$condition)), unname(table(current_df_sub$condition)), unname(table(current_df_sub$condition)), 0, 1, 0, 0, 0, "T-test", "two.sided", 1, "ns", s)
@@ -115,19 +141,36 @@ for (s in unique(all_plot_data$subregion)[10]) {
         adjust_pvalue(method = "holm") %>%
         add_significance("p.adj") %>%
         mutate(subregion = s)
+      print(current_comp)
+      
+      # Check if the group order in t_test results matches the expected order (cond_y - cond_x)
+      group1 <- current_comp$group1 # Get the name of the first group from t_test results
+      group2 <- current_comp$group2 # Get the name of the second group from t_test results
+      
+      # If the group order is not the expected one, reverse the estimate sign
+      if (group1 != cond_y | group2 != cond_x) {
+        print(paste0("T-test group1 condition: ", group1, ", T-test group2 condition: ", group2))
+        print(paste0("Estimate is originally: ", current_comp$estimate))
+        print(paste0("Our initial pairing is ", cond_y, "_", cond_x))
+        group1 <- cond_y
+        group2 <- cond_x
+        current_comp$estimate <- current_comp$estimate * -1
+        print(paste0("After flipping the sign to match our matrix the estimate is: ", current_comp$estimate))
+        print(paste0("We have updated the groups of the t_test opbject to reflect the correct grouping. Group1 is now: ", group1, " and Group 2 is: ", group2))
+      }
       
       # Now doing a check to see if the t-test grouping which always does group 1 - group2 to calculate difference
       # in means has the y group in the group 1 slot and x group in the group 2 slot
-      if (attributes(current_comp)$args$data[1, "condition"] != cond_y){
-        print(paste0("Estimate condition: ", attributes(current_comp)$args$data[1, "condition"], " Condition y is: ", cond_y))
-        print(paste0("Estimate is originally: ", current_comp$estimate))
-        current_comp$estimate <- current_comp$estimate * -1
-        print(paste0("Estimate is now: ", current_comp$estimate))
-      }
+      # if (attributes(current_comp)$args$data[1, "condition"] != cond_y){
+      #   print(paste0("Estimate condition: ", attributes(current_comp)$args$data[1, "condition"], " Condition y is: ", cond_y))
+      #   print(paste0("Estimate is originally: ", current_comp$estimate))
+      #   current_comp$estimate <- current_comp$estimate * -1
+      #   print(paste0("Estimate is now: ", current_comp$estimate))
+      # }
       
-      my_t_tests[[paste0(cond_x, "_", cond_y)]] <- current_comp
-      my_estimates[[paste0(cond_x, "_", cond_y)]] <- current_comp$estimate
-      my_sigs[[paste0(cond_x, "_", cond_y)]] <- current_comp$p.adj.signif
+      my_t_tests[[paste0(cond_y, "_", cond_x)]] <- current_comp
+      my_estimates[[paste0(cond_y, "_", cond_x)]] <- current_comp$estimate
+      my_sigs[[paste0(cond_y, "_", cond_x)]] <- current_comp$p.adj.signif
     }
   }
 
@@ -139,7 +182,7 @@ for (s in unique(all_plot_data$subregion)[10]) {
   dimnames(sigs_mat) <- list(rownames(test_mat), colnames(test_mat))
   lower_estimates <- lower.triangle(estimates_mat)
   upper_estimates <- upper.triangle(estimates_mat)
-  lower_estimates <- lower_estimates * -1
+  # lower_estimates <- lower_estimates * -1
   lower_estimates <- apply(lower_estimates, c(1, 2), as.numeric)
   indicies_to_rep <- which(lower_estimates == 0.000, arr.ind = TRUE)
   indices_to_use_in_upper <- which(upper_estimates != 0.000, arr.ind = TRUE)
@@ -166,11 +209,20 @@ for (s in unique(all_plot_data$subregion)[10]) {
     return(new_mat)
   }
   
-  # Assuming 'your_matrix' is your original matrix, apply the function
-  # your_matrix <- ... # your original matrix
-  # flipped_matrix <- flip_triangles(your_matrix)
+  # lower_estimates <- flip_triangles(lower_estimates)
   
-  lower_estimates <- flip_triangles(lower_estimates)
+  # Assuming lower_estimates is your original matrix
+  # n <- nrow(upper_estimates)
+  # 
+  # # Loop over the matrix positions
+  # for (i in 1:(n-1)) {
+  #   for (j in (i+1):n) {
+  #     # Set the upper triangle explicitly as the negative of the lower triangle
+  #     upper_estimates[i, j] <- -lower_estimates[j, i]
+  #   }
+  # }
+  
+}
 
   # This code segment is focused on generating and saving heatmaps for visualizing the differences in mean values (delta means) across various subregions and conditions, followed by creating composite images of these heatmaps. Here's a detailed summary for your collaborator:
   #
@@ -191,70 +243,120 @@ for (s in unique(all_plot_data$subregion)[10]) {
   #     The primary purpose of this code is to create detailed, visually appealing heatmaps that highlight differences in mean values across various conditions within subregions, with significant differences clearly annotated.
   #   This approach allows for an intuitive comparison of data across multiple dimensions, making it an invaluable tool for researchers looking to identify patterns, trends, and significant differences within their data.
 
-  p1 <- Heatmap(
-    matrix = lower_estimates, show_heatmap_legend = TRUE,
-    heatmap_legend_param = list(
-      title = "Delta Means (y-x)",
-      title_gp = gpar(
-        fontsize = 16,
-        fontface = "bold"
-      ),
-      direction = "horizontal",
-      title_position = "topcenter",
-      labels_gp = gpar(fontsize = 14, fontface = "bold")
-    ),
-    cluster_rows = FALSE,
-    cluster_columns = FALSE,
-    row_names_side = "left",
-    column_names_centered = TRUE,
-    column_names_rot = 45,
-    row_order = c("SHP5", "SHP1", "SWP5", "SWP1", "NH", "NW"),
-    row_title_gp = gpar(fontsize = 20, fontface = "bold"),
-    row_names_gp = gpar(fontsize = 16, fontface = "bold"),
-    na_col = "white", column_names_gp = gpar(
+#   p1 <- Heatmap(
+#     matrix = lower_estimates, show_heatmap_legend = TRUE,
+#     heatmap_legend_param = list(
+#       title = expression(bold(Delta * " Means (y - x)")),
+#       title_gp = gpar(
+#         fontsize = 16,
+#         fontface = "bold"
+#       ),
+#       direction = "horizontal",
+#       title_position = "topcenter",
+#       labels_gp = gpar(fontsize = 14, fontface = "bold")
+#     ),
+#     cluster_rows = FALSE,
+#     cluster_columns = FALSE,
+#     column_names_centered = TRUE,
+#     column_names_side = "bottom",
+#     column_names_rot = 45,
+#     column_order = c("NW", "NH", "SWP1", "SWP5", "SHP1", "SHP5"),
+#     row_order = c("SHP5", "SHP1", "SWP5", "SWP1", "NH", "NW"),
+#     row_title_gp = gpar(fontsize = 20, fontface = "bold"),
+#     row_names_gp = gpar(fontsize = 16, fontface = "bold"),
+#     row_names_side = "left",
+#     na_col = "white", column_names_gp = gpar(
+#       fontsize = 16,
+#       fontface = "bold"
+#     ),
+#     column_title = paste0(s, " | ", mean_title),
+#     column_title_gp = gpar(fontsize = 22, fontface = "bold"),
+#     cell_fun = function(j, i, x, y, width, height, fill) {
+#       if (my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17] < 0.05) {
+#         grid.text(sprintf("%s", my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17]), x, y, gp = gpar(fontsize = 16))
+#       }
+#     }, rect_gp = gpar(color = "black")
+#   )
+# 
+#   p1 <- p1 %>%
+#     draw(heatmap_legend_side = "bottom")
+# 
+# 
+#   # PNG file format
+#   # png(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
+#   png(file = paste0("~/Desktop/test_heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
+#   p1 <- draw(p1, height = unit(1, "cm") * 6)
+#   draw(p1, height = unit(1, "cm") * 6)
+#   dev.off()
+# 
+# 
+#   # SVG file format
+#   # svg(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.svg"), width = 6, height = 0.3937 * 6 + 0.7423)
+#   svg(file = paste0("~/Desktop/test_heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.svg"), width = 6, height = 0.3937 * 6 + 0.7423)
+#   p1 <- draw(p1, height = unit(1, "cm") * 6)
+#   draw(p1, height = unit(1, "cm") * 6)
+#   dev.off()
+# 
+#   p1 <- grid.grabExpr(draw(p1))
+#   plots[[s]] <- p1
+# }
+# 
+# # SVG combo plot
+# combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO", label_size = 18)
+# # save_plot(filename = paste0("Outputs/pnn_analysis/heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.svg"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
+# save_plot(filename = paste0("~/Desktop/test_heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.svg"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
+# 
+# # PNG combo plot
+# # save_plot(filename = paste0("Outputs/pnn_analysis/heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.png"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
+# save_plot(filename = paste0("~/Desktop/test_heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.png"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
+# 
+
+# Heatmap for Jacob's new data
+p1 <- Heatmap(
+  matrix = lower_estimates, show_heatmap_legend = TRUE,
+  heatmap_legend_param = list(
+    title = expression(bold(Delta * " Means (y - x)")),
+    title_gp = gpar(
       fontsize = 16,
       fontface = "bold"
     ),
-    column_title = paste0(s, " | ", mean_title),
-    column_title_gp = gpar(fontsize = 22, fontface = "bold"),
-    cell_fun = function(j, i, x, y, width, height, fill) {
-      if (my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17] < 0.05) {
-        grid.text(sprintf("%s", my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17]), x, y, gp = gpar(fontsize = 16))
-      }
-    }, rect_gp = gpar(color = "black")
-  )
+    direction = "horizontal",
+    title_position = "topcenter",
+    labels_gp = gpar(fontsize = 14, fontface = "bold")
+  ),
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  column_names_centered = TRUE,
+  column_names_side = "bottom",
+  column_names_rot = 45,
+  column_order = c("NW", "NH", "SWD2", "SWD6", "SHD2", "SHD6"),
+  row_order = c("SHD6", "SHD2", "SWD6", "SWD2", "NH", "NW"),
+  row_title_gp = gpar(fontsize = 20, fontface = "bold"),
+  row_names_gp = gpar(fontsize = 16, fontface = "bold"),
+  row_names_side = "left",
+  na_col = "white", column_names_gp = gpar(
+    fontsize = 16,
+    fontface = "bold"
+  ),
+  column_title = paste0(s, " | ", mean_title),
+  column_title_gp = gpar(fontsize = 22, fontface = "bold"),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    if (my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17] < 0.05) {
+      grid.text(sprintf("%s", my_t_tests[[paste0(colnames(test_mat)[j], "_", rownames(test_mat)[i])]][17]), x, y, gp = gpar(fontsize = 16))
+    }
+  }, rect_gp = gpar(color = "black")
+)
 
-  p1 <- p1 %>%
-    draw(heatmap_legend_side = "bottom")
+p1 <- p1 %>%
+  draw(heatmap_legend_side = "bottom")
 
 
-  # PNG file format
-  # png(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
-  png(file = paste0("~/Desktop/test_heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
-  p1 <- draw(p1, height = unit(1, "cm") * 6)
-  draw(p1, height = unit(1, "cm") * 6)
-  dev.off()
+# PNG file format
+png(file = paste0("~/Desktop/test_heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere_jacob_data.png"), units = "in", width = 6, height = 0.3937 * 6 + 0.7423, res = 600)
+p1 <- draw(p1, height = unit(1, "cm") * 6)
+draw(p1, height = unit(1, "cm") * 6)
+dev.off()
 
-
-  # SVG file format
-  # svg(file = paste0("Outputs/pnn_analysis/heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.svg"), width = 6, height = 0.3937 * 6 + 0.7423)
-  svg(file = paste0("~/Desktop/test_heatmaps/subregion_", s, "_complex_heatmap_", my_mean, "_combined_hemisphere.svg"), width = 6, height = 0.3937 * 6 + 0.7423)
-  p1 <- draw(p1, height = unit(1, "cm") * 6)
-  draw(p1, height = unit(1, "cm") * 6)
-  dev.off()
-
-  p1 <- grid.grabExpr(draw(p1))
-  plots[[s]] <- p1
-}
-
-# SVG combo plot
-combo_plot <- plot_grid(plotlist = plots, align = "hv", nrow = 5, ncol = 5, labels = "AUTO", label_size = 18)
-# save_plot(filename = paste0("Outputs/pnn_analysis/heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.svg"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
-save_plot(filename = paste0("~/Desktop/test_heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.svg"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
-
-# PNG combo plot
-# save_plot(filename = paste0("Outputs/pnn_analysis/heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.png"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
-save_plot(filename = paste0("~/Desktop/test_heatmaps/combo_plot_complexheatmap_", my_mean, "_combined_hemisphere.png"), plot = combo_plot, ncol = 5, nrow = 5, base_asp = 1.0, bg = "white")
 
 
 # This code snippet is designed to analyze and visualize data differences across various conditions within subregions and across hemispheres, focusing on statistical comparisons and heatmap generation. Here's a breakdown for your collaborator:
