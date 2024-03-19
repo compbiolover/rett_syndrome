@@ -75,7 +75,6 @@ for (s in unique(all_plot_data$subregion)[7]) {
           ))
         } else {
           # Proceed with t-test
-          # print(table(current_df_sub$condition))
           current_comp <- t_test(data = current_df_sub, formula = mean_2 ~ condition, detailed = TRUE, conf.level = 0.95) %>%
             adjust_pvalue(method = "holm") %>%
             add_significance("p.adj") %>%
@@ -146,7 +145,6 @@ for (s in unique(all_plot_data$subregion)[7]) {
     dim(sigs_mat) <- c(6, 6)
     dimnames(estimates_mat) <- list(rownames(test_mat), colnames(test_mat))
     dimnames(sigs_mat) <- list(rownames(test_mat), colnames(test_mat))
-    # lower_estimates <- lower.triangle(estimates_mat)
     upper_estimates <- upper.triangle(estimates_mat)
     
     # Function to mirror the upper triangle to the lower triangle and flip the sign so it can be read in proper direction
@@ -163,12 +161,6 @@ for (s in unique(all_plot_data$subregion)[7]) {
     }
     
     lower_estimates <- mirror_upper_to_lower(upper_estimates)
-    
-    # lower_estimates <- apply(lower_estimates, c(1, 2), as.numeric)
-    # indicies_to_rep <- which(lower_estimates == 0.000, arr.ind = TRUE)
-    # indices_to_use_in_upper <- which(upper_estimates != 0.000, arr.ind = TRUE)
-    # lower_estimates[indicies_to_rep] <- upper_estimates[indices_to_use_in_upper]
-    
     
 
     # Heatmap for Jacob's new data (by cohort)
